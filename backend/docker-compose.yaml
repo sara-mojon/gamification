@@ -1,0 +1,140 @@
+version: "3.8"
+
+services:
+  # -------------------------------------------------------
+  # 1. Base de Datos (PostgreSQL)
+  # -------------------------------------------------------
+  postgres:
+    image: postgres:16
+    container_name: gamification-db
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_DB=gamification_db
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=admin
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # -------------------------------------------------------
+  # 2. IA Generativa (Ollama) con soporte NVIDIA MX150
+  # -------------------------------------------------------
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama-service
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+
+    deploy:
+      resources:
+        limits:
+          memory: 8G # Límite de RAM del sistema (no VRAM)
+        reservations:
+          memory: 2G
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+    # Esta variable ayuda a depurar si Ollama no detecta la GPU
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - OLLAMA_DEBUG=1
+
+    restart: always
+
+  # -------------------------------------------------------
+  # 3. Ejecución de Código (Piston)
+  # -------------------------------------------------------
+  piston:
+    image: ghcr.io/engineer-man/piston:latest
+    container_name: piston-service
+    ports:
+      - "2000:2000"
+    privileged: true
+    environment:
+      - PISTON_DISABLE_CGROUP=true
+      - PISTON_DISABLE_NETWORKING=false
+      - PISTON_OUTPUT_MAX_SIZE=65536
+    command: sh -c "rm -rf isolate && node src/index.js"
+    volumes:
+      - piston_packages:/piston/packages
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2G
+    restart: always
+
+  # -------------------------------------------------------
+  # 4. MICROSERVICIO: USER SERVICE
+  # -------------------------------------------------------
+  service-user:
+    container_name: backend-user
+    build:
+      context: .
+      dockerfile: service-user/Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/gamification_db
+      - SPRING_DATASOURCE_USERNAME=postgres
+      - SPRING_DATASOURCE_PASSWORD=admin
+      - SPRING_JPA_HIBERNATE_DDL_AUTO=validate
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: on-failure
+
+  # -------------------------------------------------------
+  # 4. MICROSERVICIO: CHALLENGES SERVICE
+  # -------------------------------------------------------
+  service-challenges:
+    container_name: backend-challenges
+    build:
+      context: .
+      dockerfile: service-challenges/Dockerfile
+    ports:
+      - "8081:8081"
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/gamification_db
+      - SPRING_DATASOURCE_USERNAME=postgres
+      - SPRING_DATASOURCE_PASSWORD=admin
+      - SPRING_JPA_HIBERNATE_DDL_AUTO=validate
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: on-failure
+
+  # -------------------------------------------------------
+  # 6. MICROSERVICIO: GAMIFICATION SERVICE
+  # -------------------------------------------------------
+  service-gamification:
+    container_name: backend-gamification
+    build:
+      context: .
+      dockerfile: service-gamification/Dockerfile
+    ports:
+      - "8082:8082"
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/gamification_db
+      - SPRING_DATASOURCE_USERNAME=postgres
+      - SPRING_DATASOURCE_PASSWORD=admin
+      - SPRING_JPA_HIBERNATE_DDL_AUTO=validate
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: on-failure
+
+volumes:
+  postgres_data:
+  ollama_data:
+  piston_packages:
