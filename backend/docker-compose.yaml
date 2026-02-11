@@ -1,9 +1,7 @@
-version: "3.8"
-
 services:
-  # -------------------------------------------------------
-  # 1. Base de Datos (PostgreSQL)
-  # -------------------------------------------------------
+  # =======================================================
+  # 1. POSTGRES ANTIGUO (Gamification)
+  # =======================================================
   postgres:
     image: postgres:16
     container_name: gamification-db
@@ -15,16 +13,157 @@ services:
       - POSTGRES_PASSWORD=admin
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    restart: always
+    #restart: always
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 40s
 
-  # -------------------------------------------------------
-  # 2. IA Generativa (Ollama) con soporte NVIDIA MX150
-  # -------------------------------------------------------
+  # =======================================================
+  # 2. POSTGRES NUEVO (Infraestructura: Judge0, Keycloak)
+  # =======================================================
+  postgres-infra:
+    image: postgres:16
+    container_name: infra-db
+    ports:
+      - "5433:5432"
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=admin_infra
+      - POSTGRES_HOST_AUTH_METHOD=scram-sha-256
+    volumes:
+      - postgres_infra_data:/var/lib/postgresql/data
+      - ./init-infra.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    #restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 40s
+
+  # =======================================================
+  # 3. REDIS (Para Judge0)
+  # =======================================================
+  redis:
+    image: redis:7.2-alpine
+    container_name: judge0-redis
+    command:
+      [
+        "redis-server",
+        "--requirepass",
+        "redis_password_segura",
+        "--appendonly",
+        "yes",
+      ]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    #restart: always
+
+  # =======================================================
+  # 4. JUDGE0 SERVER (API)
+  # =======================================================
+  judge0-server:
+    image: judge0/judge0:1.13.1
+    container_name: judge0-server
+    ports:
+      - "2358:2358"
+    privileged: true
+    user: root
+    depends_on:
+      postgres-infra:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    
+    entrypoint:
+      - /bin/bash
+      - -c
+      - |
+        if [ ! -f /usr/local/bin/isolate.real ]; then
+          mv /usr/local/bin/isolate /usr/local/bin/isolate.real
+        fi
+
+        printf "#!/usr/bin/env ruby\n" > /usr/local/bin/isolate
+        printf "args = ARGV.reject { |a| a == '--cg' || a.start_with?('--cg-') }\n" >> /usr/local/bin/isolate
+        printf "exec('/usr/local/bin/isolate.real', '--no-cg', *args)\n" >> /usr/local/bin/isolate
+
+        chmod +x /usr/local/bin/isolate
+        chown judge0:judge0 /usr/local/bin/isolate
+        
+        chown -R judge0:judge0 /var/local/lib/isolate
+        
+        echo "Cambiando a usuario judge0 para iniciar el servidor..."
+        su judge0 -c "./scripts/server"
+
+    environment:
+      - POSTGRES_HOST=postgres-infra
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=judge0
+      - POSTGRES_USER=judge0
+      - POSTGRES_PASSWORD=judge0
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=redis_password_segura
+      - JUDGE0_TELEMETRY_ENABLE=false
+      - JUDGE0_HOMEPAGE_ENABLE=true
+    volumes:
+      - ./judge0.conf:/judge0.conf:ro
+      - judge0-isolate-data:/var/local/lib/isolate
+    #restart: always
+
+  # =======================================================
+  # 5. JUDGE0 WORKER
+  # =======================================================
+  judge0-worker:
+    image: judge0/judge0:1.13.1
+    container_name: judge0-worker
+    privileged: true
+    user: root
+    depends_on:
+      judge0-server:
+        condition: service_started
+    
+    entrypoint:
+      - /bin/bash
+      - -c
+      - |
+        if [ ! -f /usr/local/bin/isolate.real ]; then
+          mv /usr/local/bin/isolate /usr/local/bin/isolate.real
+        fi
+
+        printf "#!/usr/bin/env ruby\n" > /usr/local/bin/isolate
+        printf "args = ARGV.reject { |a| a == '--cg' || a.start_with?('--cg-') }\n" >> /usr/local/bin/isolate
+        printf "exec('/usr/local/bin/isolate.real', '--no-cg', *args)\n" >> /usr/local/bin/isolate
+
+        chmod +x /usr/local/bin/isolate
+        chown judge0:judge0 /usr/local/bin/isolate
+        chown -R judge0:judge0 /var/local/lib/isolate
+
+        echo "Cambiando a usuario judge0 para iniciar el worker..."
+        su judge0 -c "./scripts/workers"
+
+    environment:
+      - POSTGRES_HOST=postgres-infra
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=judge0
+      - POSTGRES_USER=judge0
+      - POSTGRES_PASSWORD=judge0
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=redis_password_segura
+      - JUDGE0_TELEMETRY_ENABLE=false
+    volumes:
+      - judge0-isolate-data:/var/local/lib/isolate
+    #restart: always
+
+  # =======================================================
+  # 6. OLLAMA (IA)
+  # =======================================================
   ollama:
     image: ollama/ollama:latest
     container_name: ollama-service
@@ -32,51 +171,24 @@ services:
       - "11434:11434"
     volumes:
       - ollama_data:/root/.ollama
-
     deploy:
       resources:
         limits:
-          memory: 8G # Límite de RAM del sistema (no VRAM)
+          memory: 8G
         reservations:
           memory: 2G
           devices:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
-
-    # Esta variable ayuda a depurar si Ollama no detecta la GPU
     environment:
       - NVIDIA_VISIBLE_DEVICES=all
       - OLLAMA_DEBUG=1
+    #restart: always
 
-    restart: always
-
-  # -------------------------------------------------------
-  # 3. Ejecución de Código (Piston)
-  # -------------------------------------------------------
-  piston:
-    image: ghcr.io/engineer-man/piston:latest
-    container_name: piston-service
-    ports:
-      - "2000:2000"
-    privileged: true
-    environment:
-      - PISTON_DISABLE_CGROUP=true
-      - PISTON_DISABLE_NETWORKING=false
-      - PISTON_OUTPUT_MAX_SIZE=65536
-    command: sh -c "rm -rf isolate && node src/index.js"
-    volumes:
-      - piston_packages:/piston/packages
-    deploy:
-      resources:
-        limits:
-          cpus: "2.0"
-          memory: 2G
-    restart: always
-
-  # -------------------------------------------------------
-  # 4. MICROSERVICIO: USER SERVICE
-  # -------------------------------------------------------
+  # =======================================================
+  # 7. MICROSERVICIOS JAVA
+  # =======================================================
   service-user:
     container_name: backend-user
     build:
@@ -85,6 +197,7 @@ services:
     ports:
       - "8080:8080"
     environment:
+      # Conecta a la BBDD VIEJA (postgres)
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/gamification_db
       - SPRING_DATASOURCE_USERNAME=postgres
       - SPRING_DATASOURCE_PASSWORD=admin
@@ -92,11 +205,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    restart: on-failure
+    #restart: on-failure
 
-  # -------------------------------------------------------
-  # 4. MICROSERVICIO: CHALLENGES SERVICE
-  # -------------------------------------------------------
   service-challenges:
     container_name: backend-challenges
     build:
@@ -112,11 +222,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    restart: on-failure
+    #restart: on-failure
 
-  # -------------------------------------------------------
-  # 6. MICROSERVICIO: GAMIFICATION SERVICE
-  # -------------------------------------------------------
   service-gamification:
     container_name: backend-gamification
     build:
@@ -132,9 +239,11 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    restart: on-failure
+    #restart: on-failure
 
 volumes:
   postgres_data:
+  postgres_infra_data:
   ollama_data:
-  piston_packages:
+  redis_data:
+  judge0-isolate-data:
