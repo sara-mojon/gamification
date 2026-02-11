@@ -73,32 +73,40 @@ services:
     ports:
       - "2358:2358"
     privileged: true
-    user: root
     depends_on:
       postgres-infra:
         condition: service_healthy
       redis:
         condition: service_started
-    
-    entrypoint:
-      - /bin/bash
-      - -c
+
+    command:
+      - "bash"
+      - "-c"
       - |
-        if [ ! -f /usr/local/bin/isolate.real ]; then
-          mv /usr/local/bin/isolate /usr/local/bin/isolate.real
-        fi
+        # Usamos /tmp porque el usuario judge0 no puede escribir en /
+        mkdir -p /tmp/wrapper
 
-        printf "#!/usr/bin/env ruby\n" > /usr/local/bin/isolate
-        printf "args = ARGV.reject { |a| a == '--cg' || a.start_with?('--cg-') }\n" >> /usr/local/bin/isolate
-        printf "exec('/usr/local/bin/isolate.real', '--no-cg', *args)\n" >> /usr/local/bin/isolate
+        # 1. Escribimos el script
+        echo '#!/bin/bash' > /tmp/wrapper/isolate
+        echo 'clean_args=()' >> /tmp/wrapper/isolate
+        echo 'for arg in "$$@"; do' >> /tmp/wrapper/isolate
+        echo '  case $$arg in' >> /tmp/wrapper/isolate
+        echo '    --cg) ;;' >> /tmp/wrapper/isolate
+        echo '    --cg-*) ;;' >> /tmp/wrapper/isolate
+        echo '    *) clean_args+=("$$arg") ;;' >> /tmp/wrapper/isolate
+        echo '  esac' >> /tmp/wrapper/isolate
+        echo 'done' >> /tmp/wrapper/isolate
+        echo 'exec /usr/local/bin/isolate "$${clean_args[@]}"' >> /tmp/wrapper/isolate
 
-        chmod +x /usr/local/bin/isolate
-        chown judge0:judge0 /usr/local/bin/isolate
-        
-        chown -R judge0:judge0 /var/local/lib/isolate
-        
-        echo "Cambiando a usuario judge0 para iniciar el servidor..."
-        su judge0 -c "./scripts/server"
+        # 2. Permisos
+        chmod +x /tmp/wrapper/isolate
+
+        # 3. PATH (Apuntando a la nueva ruta en /tmp)
+        export PATH=/tmp/wrapper:$$PATH
+
+        # 4. Arrancamos
+        echo "Wrapper instalado en /tmp/wrapper. Arrancando..."
+        ./scripts/server  # (Recuerda poner ./scripts/workers en el worker)
 
     environment:
       - POSTGRES_HOST=postgres-infra
@@ -111,6 +119,7 @@ services:
       - REDIS_PASSWORD=redis_password_segura
       - JUDGE0_TELEMETRY_ENABLE=false
       - JUDGE0_HOMEPAGE_ENABLE=true
+      - JUDGE0_CONF_FILE=/dev/null
     volumes:
       - ./judge0.conf:/judge0.conf:ro
       - judge0-isolate-data:/var/local/lib/isolate
@@ -123,29 +132,38 @@ services:
     image: judge0/judge0:1.13.1
     container_name: judge0-worker
     privileged: true
-    user: root
     depends_on:
       judge0-server:
         condition: service_started
-    
-    entrypoint:
-      - /bin/bash
-      - -c
+
+    command:
+      - "bash"
+      - "-c"
       - |
-        if [ ! -f /usr/local/bin/isolate.real ]; then
-          mv /usr/local/bin/isolate /usr/local/bin/isolate.real
-        fi
+        # Usamos /tmp porque el usuario judge0 no puede escribir en /
+        mkdir -p /tmp/wrapper
 
-        printf "#!/usr/bin/env ruby\n" > /usr/local/bin/isolate
-        printf "args = ARGV.reject { |a| a == '--cg' || a.start_with?('--cg-') }\n" >> /usr/local/bin/isolate
-        printf "exec('/usr/local/bin/isolate.real', '--no-cg', *args)\n" >> /usr/local/bin/isolate
+        # 1. Escribimos el script
+        echo '#!/bin/bash' > /tmp/wrapper/isolate
+        echo 'clean_args=()' >> /tmp/wrapper/isolate
+        echo 'for arg in "$$@"; do' >> /tmp/wrapper/isolate
+        echo '  case $$arg in' >> /tmp/wrapper/isolate
+        echo '    --cg) ;;' >> /tmp/wrapper/isolate
+        echo '    --cg-*) ;;' >> /tmp/wrapper/isolate
+        echo '    *) clean_args+=("$$arg") ;;' >> /tmp/wrapper/isolate
+        echo '  esac' >> /tmp/wrapper/isolate
+        echo 'done' >> /tmp/wrapper/isolate
+        echo 'exec /usr/local/bin/isolate "$${clean_args[@]}"' >> /tmp/wrapper/isolate
 
-        chmod +x /usr/local/bin/isolate
-        chown judge0:judge0 /usr/local/bin/isolate
-        chown -R judge0:judge0 /var/local/lib/isolate
+        # 2. Permisos
+        chmod +x /tmp/wrapper/isolate
 
-        echo "Cambiando a usuario judge0 para iniciar el worker..."
-        su judge0 -c "./scripts/workers"
+        # 3. PATH (Apuntando a la nueva ruta en /tmp)
+        export PATH=/tmp/wrapper:$$PATH
+
+        # 4. Arrancamos
+        echo "Wrapper instalado en /tmp/wrapper. Arrancando..."
+        ./scripts/server  # (Recuerda poner ./scripts/workers en el worker)
 
     environment:
       - POSTGRES_HOST=postgres-infra
@@ -157,6 +175,7 @@ services:
       - REDIS_PORT=6379
       - REDIS_PASSWORD=redis_password_segura
       - JUDGE0_TELEMETRY_ENABLE=false
+      - JUDGE0_CONF_FILE=/dev/null
     volumes:
       - judge0-isolate-data:/var/local/lib/isolate
     #restart: always
@@ -197,7 +216,6 @@ services:
     ports:
       - "8080:8080"
     environment:
-      # Conecta a la BBDD VIEJA (postgres)
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/gamification_db
       - SPRING_DATASOURCE_USERNAME=postgres
       - SPRING_DATASOURCE_PASSWORD=admin
