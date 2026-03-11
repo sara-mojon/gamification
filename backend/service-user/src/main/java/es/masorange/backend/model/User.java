@@ -15,16 +15,20 @@ public class User {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(unique = true)
+    private String keycloakId;
+
     @Column(unique = true, nullable = false)
     private String username;
 
-    @Column(nullable = false)
-    private String password;
-
-    private String role;
+    private String role = "user";
 
     private String email;
 
     private String nombre;
+
+    private Integer score = 0;
+
+    private String preferredLanguage = "Java";
 
 }

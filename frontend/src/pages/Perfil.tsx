@@ -1,7 +1,7 @@
+import { useState, useEffect } from "react";
 import { useAuth } from "react-oidc-context";
 import { User, Code, Star, Calendar, Activity } from "lucide-react";
 
-// DATOS FALSOS (Historial de actividad reciente)
 const actividadReciente = [
   { id: 101, titulo: "Sumar dos números", fecha: "Hoy, 10:30", puntosGanados: 10, dificultad: "Fácil" },
   { id: 102, titulo: "Contar vocales", fecha: "Ayer, 18:15", puntosGanados: 15, dificultad: "Fácil" },
@@ -9,24 +9,69 @@ const actividadReciente = [
   { id: 104, titulo: "Detector de Palíndromos", fecha: "Hace 3 días", puntosGanados: 15, dificultad: "Fácil" },
 ];
 
+interface PerfilData {
+  puntos: number;
+  retosCompletados: number;
+  rachaDias: number;
+  rangoGlobal: number | string;
+}
+
 export default function Perfil() {
-  // Extraemos los datos REALES de tu sesión de Keycloak
   const auth = useAuth();
+  const token = auth.user?.access_token;
+  
   const username = auth.user?.profile.preferred_username || "Hacker Anónimo";
   const email = auth.user?.profile.email || "correo@oculto.com";
 
-  // Estadísticas mockeadas (coinciden con tu posición en el Ranking)
-  const estadisticas = {
-    puntos: 1250,
-    rangoGlobal: 7,
-    retosCompletados: 42,
-    rachaDias: 5
-  };
+  const [estadisticas, setEstadisticas] = useState<PerfilData>({
+    puntos: 0,
+    retosCompletados: 0,
+    rachaDias: 0, 
+    rangoGlobal: "-" 
+  });
+  
+  const [cargando, setCargando] = useState(true);
+
+  useEffect(() => {
+    const cargarMiPerfil = async () => {
+      if (!token) return;
+
+      try {
+        const response = await fetch('http://localhost:8080/api/users/me', {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (response.ok) {
+          const misDatos = await response.json();
+          
+          setEstadisticas({
+            puntos: misDatos.score || 0,
+            retosCompletados: misDatos.retosCompletados || 0,
+            rachaDias: 0, 
+            rangoGlobal: "-" 
+          });
+        } else {
+          console.error("Error al cargar perfil:", response.status);
+        }
+      } catch (error) {
+        console.error("Error conectando con el backend:", error);
+      } finally {
+        setCargando(false);
+      }
+    };
+
+    cargarMiPerfil();
+  }, [token]);
+
+  if (cargando) {
+    return <div style={{ textAlign: "center", padding: "50px", color: "#666" }}>Cargando tu perfil... 🕵️‍♀️</div>;
+  }
 
   return (
     <div style={{ maxWidth: "1000px", margin: "0 auto" }}>
       
-      {/* Cabecera de la página */}
       <div style={{ marginBottom: "30px" }}>
         <h1 style={{ fontSize: "2.5rem", color: "#1e1e1e", marginBottom: "10px", display: "flex", alignItems: "center" }}>
           <User size={36} style={{ marginRight: "15px", color: "#ff4b4b" }} />
@@ -35,18 +80,15 @@ export default function Perfil() {
       </div>
 
       <div style={{ display: "flex", gap: "30px", flexWrap: "wrap", alignItems: "flex-start" }}>
-        
-        {/* --- COLUMNA IZQUIERDA (Info del usuario y Tarjeta de Stats) --- */}
+      
         <div style={{ flex: "1 1 300px", display: "flex", flexDirection: "column", gap: "30px" }}>
           
-          {/* Tarjeta de Identidad */}
           <div style={{ backgroundColor: "white", borderRadius: "10px", padding: "30px", boxShadow: "0 4px 6px rgba(0,0,0,0.05)", border: "1px solid #eaeaea", textAlign: "center" }}>
             <div style={{ 
               width: "100px", height: "100px", borderRadius: "50%", backgroundColor: "#1e1e1e", color: "#ff4b4b", 
               display: "flex", alignItems: "center", justifyContent: "center", fontSize: "3rem", fontWeight: "bold", 
               margin: "0 auto 20px auto", border: "4px solid #fff", boxShadow: "0 4px 10px rgba(0,0,0,0.1)"
             }}>
-              {/* Cogemos la primera letra del nombre para el Avatar */}
               {username.charAt(0).toUpperCase()}
             </div>
             <h2 style={{ margin: "0 0 5px 0", fontSize: "1.8rem", color: "#333" }}>{username}</h2>
@@ -58,7 +100,6 @@ export default function Perfil() {
             </div>
           </div>
 
-          {/* Tarjeta de Estadísticas Rápidas */}
           <div style={{ backgroundColor: "white", borderRadius: "10px", padding: "25px", boxShadow: "0 4px 6px rgba(0,0,0,0.05)", border: "1px solid #eaeaea" }}>
             <h3 style={{ margin: "0 0 20px 0", fontSize: "1.2rem", color: "#333", borderBottom: "2px solid #f0f0f0", paddingBottom: "10px" }}>Estadísticas de Combate</h3>
             
@@ -82,7 +123,6 @@ export default function Perfil() {
 
         </div>
 
-        {/* --- COLUMNA DERECHA (Historial de Actividad) --- */}
         <div style={{ flex: "2 1 500px", backgroundColor: "white", borderRadius: "10px", padding: "30px", boxShadow: "0 4px 6px rgba(0,0,0,0.05)", border: "1px solid #eaeaea" }}>
           <h3 style={{ margin: "0 0 25px 0", fontSize: "1.4rem", color: "#333", display: "flex", alignItems: "center" }}>
             <Calendar size={24} style={{ marginRight: "10px", color: "#888" }} />

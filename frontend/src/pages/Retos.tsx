@@ -3,7 +3,7 @@ import { Terminal, Clock, ChevronRight, Search, Filter, ChevronLeft } from "luci
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "react-oidc-context";
 
-const ITEMS_POR_PAGINA = 4;
+const ITEMS_POR_PAGINA = 10;
 
 interface BackendChallenge {
   id: string;

@@ -5,36 +5,32 @@ import Retos from "./pages/Retos";
 import Perfil from "./pages/Perfil";
 import Ranking from "./pages/Ranking";
 import Entrenar from "./pages/Entrenar";
+import Admin from "./pages/Admin";
 
 function App() {
   const auth = useAuth();
 
-  // 1. Pantalla de carga mientras Keycloak decide si hay sesión
   if (auth.isLoading) {
     return <div style={{ padding: "2rem", textAlign: "center", fontFamily: "sans-serif" }}>Cargando la matriz...</div>;
   }
 
-  // 2. Si ocurre algún error de conexión con Keycloak
   if (auth.error) {
     return <div style={{ padding: "2rem", color: "red", fontFamily: "sans-serif" }}>Ocurrió un error: {auth.error.message}</div>;
   }
 
-  // 3. PANTALLA PRIVADA (El usuario está logueado)
   if (auth.isAuthenticated) {
     return (
       <BrowserRouter>
         <Routes>
-          {/* El Layout envuelve a todas las páginas privadas */}
           <Route path="/" element={<Layout />}>
             
-            {/* Si entras a la raíz ("/"), te redirige automáticamente a los retos */}
             <Route index element={<Navigate to="/retos" replace />} />
             
-            {/* Las tres secciones principales de tu app */}
             <Route path="retos" element={<Retos />} />
             <Route path="perfil" element={<Perfil />} />
             <Route path="ranking" element={<Ranking />} />
             <Route path="entrenar/:id" element={<Entrenar />} />
+            <Route path="admin" element={<Admin />} />
             
           </Route>
         </Routes>
@@ -42,7 +38,6 @@ function App() {
     );
   }
 
-  // 4. PANTALLA PÚBLICA (El usuario NO está logueado)
   return (
     <div style={{ height: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", backgroundColor: "#f5f5f5", fontFamily: "sans-serif" }}>
       <h1 style={{ fontSize: "3rem", marginBottom: "10px", color: "#333" }}>Codewars Clone</h1>
