@@ -59,7 +59,7 @@ export default function Entrenar() {
         } else {
           setError("No se pudo cargar el reto. Puede que no exista.");
         }
-      } catch (_) {
+      } catch {
         setError("Error de red intentando conectar con el servidor.");
       } finally {
         setCargando(false);
