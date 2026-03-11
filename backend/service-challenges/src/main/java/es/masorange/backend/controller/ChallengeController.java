@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Optional;
 
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -20,6 +21,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 
 @RestController
 @RequestMapping("/api/challenges")
+@CrossOrigin(origins = "http://localhost:5173")
 public class ChallengeController {
 
     private final ChallengeService challengeService;
@@ -28,17 +30,17 @@ public class ChallengeController {
         this.challengeService = challengeService;
     }
 
-    @GetMapping("/{id}")
+    @GetMapping("/id/{id}")
     public CodeWarsChallengeDTO getChallengeFromCodeWars(@PathVariable String id) {
         return challengeService.getAndSaveChallenge(id);
     }
 
-    @GetMapping("/challenges")
+    @GetMapping("/")
     public List<Challenge> getAllChallenges() {
         return challengeService.getAllChallenges();
     }
 
-    @GetMapping("/id/{id}")
+    @GetMapping("/{id}")
     public ResponseEntity<Challenge> getChallenge(@PathVariable String id) {
         return challengeService.getChallenge(id)
                 .map(ResponseEntity::ok)

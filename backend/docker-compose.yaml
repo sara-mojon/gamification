@@ -1,34 +1,12 @@
 services:
   # =======================================================
-  # 1. POSTGRES ANTIGUO (Gamification)
-  # =======================================================
-  postgres:
-    image: postgres:16
-    container_name: gamification-db
-    ports:
-      - "5432:5432"
-    environment:
-      - POSTGRES_DB=gamification_db
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=admin
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    #restart: always
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 10s
-      timeout: 10s
-      retries: 10
-      start_period: 40s
-
-  # =======================================================
-  # 2. POSTGRES NUEVO (Infraestructura: Judge0, Keycloak)
+  # 1. POSTGRES (Gamification & Infraestructura: Judge0, Keycloak)
   # =======================================================
   postgres-infra:
     image: postgres:16
     container_name: infra-db
     ports:
-      - "5433:5432"
+      - "5432:5432"
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=admin_infra
@@ -45,7 +23,7 @@ services:
       start_period: 40s
 
   # =======================================================
-  # 3. REDIS (Para Judge0)
+  # 2. REDIS (Para Judge0)
   # =======================================================
   redis:
     image: redis:7.2-alpine
@@ -59,13 +37,13 @@ services:
         "yes",
       ]
     ports:
-      - "6379:6379"
+      - "16379:6379"
     volumes:
       - redis_data:/data
     #restart: always
 
   # =======================================================
-  # 4. JUDGE0 SERVER (API)
+  # 3. JUDGE0 SERVER (API)
   # =======================================================
   judge0-server:
     image: judge0/judge0:1.13.1
@@ -112,8 +90,8 @@ services:
       - POSTGRES_HOST=postgres-infra
       - POSTGRES_PORT=5432
       - POSTGRES_DB=judge0
-      - POSTGRES_USER=judge0
-      - POSTGRES_PASSWORD=judge0
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=admin_infra
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - REDIS_PASSWORD=redis_password_segura
@@ -126,7 +104,7 @@ services:
     #restart: always
 
   # =======================================================
-  # 5. JUDGE0 WORKER
+  # 4. JUDGE0 WORKER
   # =======================================================
   judge0-worker:
     image: judge0/judge0:1.13.1
@@ -169,8 +147,8 @@ services:
       - POSTGRES_HOST=postgres-infra
       - POSTGRES_PORT=5432
       - POSTGRES_DB=judge0
-      - POSTGRES_USER=judge0
-      - POSTGRES_PASSWORD=judge0
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=admin_infra
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - REDIS_PASSWORD=redis_password_segura
@@ -181,7 +159,7 @@ services:
     #restart: always
 
   # =======================================================
-  # 6. OLLAMA (IA)
+  # 5. OLLAMA (IA)
   # =======================================================
   ollama:
     image: ollama/ollama:latest
@@ -206,6 +184,28 @@ services:
     #restart: always
 
   # =======================================================
+  # 6. KEYCLOAK
+  # =======================================================
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0.0
+    container_name: keycloak
+    command: start-dev
+    environment:
+      - KEYCLOAK_ADMIN=admin
+      - KEYCLOAK_ADMIN_PASSWORD=admin
+      - KC_DB=postgres
+      - KC_DB_URL=jdbc:postgresql://postgres-infra:5432/keycloak
+      - KC_DB_USERNAME=keycloak
+      - KC_DB_PASSWORD=keycloak
+      - KC_HOSTNAME=localhost
+    ports:
+      - "8180:8080"
+    depends_on:
+      postgres-infra:
+        condition: service_healthy
+    #restart: always
+
+  # =======================================================
   # 7. MICROSERVICIOS JAVA
   # =======================================================
   service-user:
@@ -216,12 +216,12 @@ services:
     ports:
       - "8080:8080"
     environment:
-      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/gamification_db
-      - SPRING_DATASOURCE_USERNAME=postgres
-      - SPRING_DATASOURCE_PASSWORD=admin
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-infra:5432/gamification_db
+      - SPRING_DATASOURCE_USERNAME=gamification
+      - SPRING_DATASOURCE_PASSWORD=gamification
       - SPRING_JPA_HIBERNATE_DDL_AUTO=validate
     depends_on:
-      postgres:
+      postgres-infra:
         condition: service_healthy
     #restart: on-failure
 
@@ -233,12 +233,12 @@ services:
     ports:
       - "8081:8081"
     environment:
-      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/gamification_db
-      - SPRING_DATASOURCE_USERNAME=postgres
-      - SPRING_DATASOURCE_PASSWORD=admin
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-infra:5432/gamification_db
+      - SPRING_DATASOURCE_USERNAME=gamification
+      - SPRING_DATASOURCE_PASSWORD=gamification
       - SPRING_JPA_HIBERNATE_DDL_AUTO=validate
     depends_on:
-      postgres:
+      postgres-infra:
         condition: service_healthy
     #restart: on-failure
 
@@ -250,17 +250,16 @@ services:
     ports:
       - "8082:8082"
     environment:
-      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/gamification_db
-      - SPRING_DATASOURCE_USERNAME=postgres
-      - SPRING_DATASOURCE_PASSWORD=admin
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres-infra:5432/gamification_db
+      - SPRING_DATASOURCE_USERNAME=gamification
+      - SPRING_DATASOURCE_PASSWORD=gamification
       - SPRING_JPA_HIBERNATE_DDL_AUTO=validate
     depends_on:
-      postgres:
+      postgres-infra:
         condition: service_healthy
     #restart: on-failure
 
 volumes:
-  postgres_data:
   postgres_infra_data:
   ollama_data:
   redis_data:

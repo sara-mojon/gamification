@@ -1,7 +1,5 @@
 package es.masorange.backend.controller;
 
-import es.masorange.backend.model.LoginRequestDTO;
-import es.masorange.backend.model.SigninRequestDTO;
 import es.masorange.backend.model.User;
 import es.masorange.backend.model.AuthResponseDTO;
 import es.masorange.backend.model.BasicResponseDTO;
@@ -30,21 +28,6 @@ public class UserController {
 
     public UserController(UserService userService) {
         this.userService = userService;
-    }
-
-    @PostMapping("/login")
-    public ResponseEntity<?> login(@RequestBody LoginRequestDTO body) {
-        try {
-            AuthResponseDTO response = userService.login(body);
-            return ResponseEntity.ok(response);
-        } catch (RuntimeException e) {
-            return ResponseEntity.status(401).body(new BasicResponseDTO(e.getMessage(), "401"));
-        }
-    }
-
-    @PostMapping("/signin")
-    public BasicResponseDTO signin(@RequestBody SigninRequestDTO body) {
-        return userService.signin(body);
     }
 
     @GetMapping("/user/{id}")

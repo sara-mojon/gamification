@@ -5,7 +5,6 @@ import java.util.Optional;
 
 import org.springframework.stereotype.Service;
 
-import es.masorange.backend.config.JwtUtils;
 import es.masorange.backend.model.*;
 import es.masorange.backend.repository.UserRepository;
 
@@ -13,48 +12,9 @@ import es.masorange.backend.repository.UserRepository;
 public class UserService {
 
     private final UserRepository userRepository;
-    private final JwtUtils jwtUtils;
 
-    public UserService(UserRepository userRepository, JwtUtils jwtUtils) {
+    public UserService(UserRepository userRepository) {
         this.userRepository = userRepository;
-        this.jwtUtils = jwtUtils;
-    }
-
-    public AuthResponseDTO login(LoginRequestDTO body) {
-        Optional<User> userOpt = userRepository.findByUsername(body.username());
-
-        if (userOpt.isPresent()) {
-            User user = userOpt.get();
-
-            if (user.getPassword().equals(body.password())) {
-
-                String token = jwtUtils.generateToken(user.getUsername(), user.getRole());
-
-                return new AuthResponseDTO(token, user.getUsername(), user.getRole());
-            }
-        }
-
-        throw new RuntimeException("Usuario o contraseña incorrectos");
-    }
-
-    public BasicResponseDTO signin(SigninRequestDTO body) {
-        Optional<User> user = userRepository.findByUsername(body.username());
-
-        if (user.isPresent()) {
-            return new BasicResponseDTO("El usuario ya existe", "409");
-        }
-
-        User newUser = new User();
-        newUser.setUsername(body.username());
-        newUser.setPassword(body.password());
-        newUser.setEmail(body.email());
-        newUser.setNombre(body.nombre());
-
-        newUser.setRole("user");
-
-        userRepository.save(newUser);
-
-        return new BasicResponseDTO("Usuario creado correctamente", "201");
     }
 
     public Optional<User> getUserById(Long id) {
