@@ -3,6 +3,7 @@ package es.masorange.backend.controller;
 import java.util.HashMap;
 import java.util.Map;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -11,9 +12,14 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import es.masorange.backend.services.SlackIntegrationService;
+
 @RestController
 @RequestMapping("/api/slack")
 public class SlackController {
+
+    @Autowired
+    private SlackIntegrationService slackService;
 
     // ==========================================================
     // 1. EVENTOS DE SLACK - Para el challenge y archivos
@@ -21,16 +27,25 @@ public class SlackController {
     @PostMapping(value = "/events", consumes = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<Map<String, Object>> handleEvents(@RequestBody Map<String, Object> payload) {
 
-        System.out.println("Payload de Slack (Eventos): " + payload);
-
-        // REGLA DE ORO: Responder al challenge
+        // 1. EL CHALLENGE
         if ("url_verification".equals(payload.get("type"))) {
             Map<String, Object> response = new HashMap<>();
             response.put("challenge", payload.get("challenge"));
             return ResponseEntity.ok(response);
         }
 
-        // Aquí procesaremos los archivos subidos (solucion.py) más adelante
+        // 2. RECIBIR MENSAJES DIRECTOS
+        if ("event_callback".equals(payload.get("type"))) {
+            Map<String, Object> event = (Map<String, Object>) payload.get("event");
+
+            if (event != null && "message".equals(event.get("type")) && event.get("bot_id") == null) {
+                String idUsuario = (String) event.get("user");
+
+                // Usas tu método modificado para responderle por privado
+                slackService.enviarMensajeASlack(idUsuario, "¡Hola! Estoy listo para procesar tus katas.");
+            }
+        }
+
         return ResponseEntity.ok().build();
     }
 
@@ -41,6 +56,7 @@ public class SlackController {
     public Map<String, Object> handleCommands(
             @RequestParam("command") String command,
             @RequestParam("user_name") String userName,
+            @RequestParam("user_id") String userId,
             @RequestParam(value = "text", defaultValue = "") String text) {
 
         System.out
@@ -79,28 +95,55 @@ public class SlackController {
                 break;
 
             case "/duelo":
-                String oponente = text.trim();
+                String oponenteRaw = text.trim();
 
-                if (oponente.isEmpty() || !oponente.startsWith("@")) {
+                // 1. Validamos que haya escrito la @ (ya sea en formato literal o ID)
+                if (oponenteRaw.isEmpty() || (!oponenteRaw.startsWith("@") && !oponenteRaw.startsWith("<@"))) {
                     response.put("response_type", "ephemeral");
                     response.put("text", "⚠️ *¡Error!* Para lanzar un duelo debes etiquetar a tu oponente.\n" +
                             "💡 *Ejemplo de uso:* `/duelo @nombre_usuario`");
                     break;
                 }
 
-                if (oponente.equals("@" + userName)) {
+                String idOponente;
+                String oponenteParaMensaje;
+
+                // 2. Extraemos el destinatario dependiendo de cómo lo mande Slack
+                if (oponenteRaw.startsWith("<@")) {
+                    // Si viene con ID oculto: <@U12345678|mario>
+                    int finId = oponenteRaw.indexOf("|");
+                    if (finId == -1)
+                        finId = oponenteRaw.indexOf(">");
+                    idOponente = oponenteRaw.substring(2, finId);
+                    oponenteParaMensaje = "<@" + idOponente + ">"; // Para que brille en azul
+                } else {
+                    // Si viene en texto plano: @mario
+                    idOponente = oponenteRaw; // Usaremos "@mario" como destinatario
+                    oponenteParaMensaje = oponenteRaw;
+                }
+
+                // 3. Validamos el autodesafío (comparando tanto por ID como por nombre)
+                if (idOponente.equals(userId) || oponenteRaw.equals("@" + userName)) {
                     response.put("response_type", "ephemeral");
                     response.put("text", "🤡 No puedes batirte en duelo contigo mismo. ¡Busca un rival de verdad!");
                     break;
                 }
 
-                String mensajeDuelo = "🔥 *¡NUEVO DESAFÍO EN LA ARENA!* 🔥\n\n" +
-                        "El desarrollador @" + userName + " ha lanzado el guante a " + oponente + ".\n" +
-                        "⚔️ *" + oponente
-                        + "*, la afrenta es pública. ¿Aceptas el duelo de código para defender tu honor?";
+                // 4. Preparamos los textos
+                String mensajePrivadoOponente = "⚔️ *¡HAS SIDO DESAFIADO!* ⚔️\n" +
+                        "El usuario <@" + userId + "> te ha retado a un duelo de código.\n" +
+                        "¿Aceptas el reto? Prepara tu teclado...";
 
+                String mensajeDueloPublico = "🔥 *¡NUEVO DESAFÍO EN LA ARENA!* 🔥\n\n" +
+                        "El desarrollador <@" + userId + "> ha lanzado un desafío a " + oponenteParaMensaje + ".\n" +
+                        "La afrenta es pública. ¡Que gane el mejor código!";
+
+                // 5. Enviamos el mensaje directo
+                slackService.enviarMensajeASlack(idOponente, mensajePrivadoOponente);
+
+                // 6. Respondemos en el canal público
                 response.put("response_type", "in_channel");
-                response.put("text", mensajeDuelo);
+                response.put("text", mensajeDueloPublico);
                 break;
 
             case "/hint":

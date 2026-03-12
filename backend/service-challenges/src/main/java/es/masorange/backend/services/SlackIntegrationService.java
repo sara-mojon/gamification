@@ -1,5 +1,8 @@
 package es.masorange.backend.services;
 
+import java.util.HashMap;
+import java.util.Map;
+
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
@@ -8,15 +11,13 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 
 @Service
-public class SlackScheduledRetoService {
+public class SlackIntegrationService {
 
     private final String slackBotToken = "xoxb-tu-token-de-bot-aqui";
     private final String canalId = "C123456789";
 
-    @Scheduled(cron = "0 0 10 */2 * *") // Cada 48h a las 10:00 (o @Scheduled(fixedRate = 10000) para probar)
+    @Scheduled(cron = "0 0 10 */2 * *")
     public void dispararRetoCada48h() {
-
-        // Datos mockeados del reto (luego los sacarás de tu base de datos)
         String tituloReto = "Validador de Sudokus";
         String dificultad = "Difícil";
         String descripcion = "Escribe un algoritmo eficiente que determine si un tablero de Sudoku de 9x9 actual es válido según las reglas clásicas.";
@@ -32,10 +33,10 @@ public class SlackScheduledRetoService {
                 +
                 "2️⃣ *Desde la Web:* Entra en la plataforma y usa nuestro editor integrado: " + urlReto;
 
-        enviarMensajeASlack(mensaje);
+        enviarMensajeASlack(this.canalId, mensaje);
     }
 
-    private void enviarMensajeASlack(String texto) {
+    public void enviarMensajeASlack(String canalOIdUsuario, String texto) {
         RestTemplate restTemplate = new RestTemplate();
         String url = "https://slack.com/api/chat.postMessage";
 
@@ -43,16 +44,17 @@ public class SlackScheduledRetoService {
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.setBearerAuth(slackBotToken);
 
-        String textoLimpio = texto.replace("\"", "\\\"").replace("\n", "\\n");
-        String payload = String.format("{\"channel\":\"%s\",\"text\":\"%s\"}", canalId, textoLimpio);
+        Map<String, String> body = new HashMap<>();
+        body.put("channel", canalOIdUsuario);
+        body.put("text", texto);
 
-        HttpEntity<String> request = new HttpEntity<>(payload, headers);
+        HttpEntity<Map<String, String>> request = new HttpEntity<>(body, headers);
 
         try {
             restTemplate.postForEntity(url, request, String.class);
-            System.out.println("Reto con opciones enviado a Slack.");
+            System.out.println("Mensaje enviado a Slack (Destino: " + canalOIdUsuario + ")");
         } catch (Exception e) {
-            System.err.println("Error enviando el reto: " + e.getMessage());
+            System.err.println("Error enviando mensaje a Slack: " + e.getMessage());
         }
     }
 }
