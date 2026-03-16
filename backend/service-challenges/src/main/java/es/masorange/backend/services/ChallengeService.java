@@ -20,7 +20,7 @@ public class ChallengeService {
         this.challengeRepository = challengeRepository;
     }
 
-    public CodeWarsChallengeDTO getAndSaveChallenge(String challengeId) {
+    public CodeWarsChallengeDTO importChallengeFromCodeWars(String challengeId) {
 
         CodeWarsChallengeDTO dto = this.webClient.get()
                 .uri("/code-challenges/{id}", challengeId)
@@ -82,26 +82,21 @@ public class ChallengeService {
     }
 
     public BasicResponseDTO updateChallenge(String id, Challenge dto) {
-        Optional<Challenge> optionalChallenge = challengeRepository.findById(id);
+        return challengeRepository.findById(id).map(existing -> {
 
-        if (optionalChallenge.isPresent()) {
-            Challenge existing = optionalChallenge.get();
-
-            if (dto.getName() != null)
-                existing.setName(dto.getName());
-            if (dto.getDescription() != null)
-                existing.setDescription(dto.getDescription());
-            if (dto.getRank() != null)
-                existing.setRank(dto.getRank());
-            if (dto.getSlug() != null) {
-                existing.setSlug(dto.getSlug());
-            }
+            Optional.ofNullable(dto.getName()).ifPresent(existing::setName);
+            Optional.ofNullable(dto.getDescription()).ifPresent(existing::setDescription);
+            Optional.ofNullable(dto.getRank()).ifPresent(existing::setRank);
+            Optional.ofNullable(dto.getSlug()).ifPresent(existing::setSlug);
+            Optional.ofNullable(dto.getIsVisible()).ifPresent(existing::setIsVisible);
+            Optional.ofNullable(dto.getTags()).ifPresent(existing::setTags);
+            Optional.ofNullable(dto.getLanguages()).ifPresent(existing::setLanguages);
+            Optional.ofNullable(dto.getTests()).ifPresent(existing::setTests);
+            Optional.ofNullable(dto.getTemplates()).ifPresent(existing::setTemplates);
 
             challengeRepository.save(existing);
-
             return new BasicResponseDTO("Challenge actualizado correctamente", "200");
-        } else {
-            return new BasicResponseDTO("No se encontró el challenge con id: " + id, "404");
-        }
+
+        }).orElseGet(() -> new BasicResponseDTO("No se encontró el challenge con id: " + id, "404"));
     }
 }

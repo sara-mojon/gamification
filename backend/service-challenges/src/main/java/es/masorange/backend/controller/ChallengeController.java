@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -30,9 +31,19 @@ public class ChallengeController {
         this.challengeService = challengeService;
     }
 
-    @GetMapping("/id/{id}")
-    public CodeWarsChallengeDTO getChallengeFromCodeWars(@PathVariable String id) {
-        return challengeService.getAndSaveChallenge(id);
+    @PostMapping("/import/{id}")
+    public CodeWarsChallengeDTO importChallengeFromCodeWars(@PathVariable String id) {
+        return challengeService.importChallengeFromCodeWars(id);
+    }
+
+    @PostMapping("/generate/challenge")
+    public String generateChallenge() {
+        return new String();
+    }
+
+    @PostMapping("/generate/test/{id}")
+    public String generateTestforChallenge(@PathVariable String id) {
+        return new String();
     }
 
     @GetMapping("/")
@@ -47,13 +58,14 @@ public class ChallengeController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
-    @DeleteMapping("{id}")
+    @DeleteMapping("/{id}")
     public BasicResponseDTO deleteChallenge(@PathVariable String id) {
         return challengeService.deleteChallenge(id);
     }
 
-    @PatchMapping("{id}")
+    @PatchMapping("/{id}")
     public BasicResponseDTO updateChallenge(@PathVariable String id, @RequestBody Challenge dto) {
         return challengeService.updateChallenge(id, dto);
     }
+
 }

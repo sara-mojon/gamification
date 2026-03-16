@@ -1,5 +1,10 @@
 package es.masorange.backend.model;
 
+import java.util.*;
+
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -24,5 +29,29 @@ public class Challenge {
     private String description;
 
     private Integer rank;
+
+    @Column(name = "is_visible")
+    private Boolean isVisible = false;
+
+    @JdbcTypeCode(SqlTypes.ARRAY)
+    @Column(name = "tags", columnDefinition = "text[]")
+    private List<String> tags;
+
+    @ElementCollection
+    @CollectionTable(name = "challenge_languages", joinColumns = @JoinColumn(name = "challenge_id"))
+    @Column(name = "language")
+    private Set<String> languages = new HashSet<>();
+
+    @ElementCollection
+    @CollectionTable(name = "challenge_tests", joinColumns = @JoinColumn(name = "challenge_id"))
+    @MapKeyColumn(name = "language")
+    @Column(name = "test_script")
+    private Map<String, String> tests = new HashMap<>();
+
+    @ElementCollection
+    @CollectionTable(name = "challenge_templates", joinColumns = @JoinColumn(name = "challenge_id"))
+    @MapKeyColumn(name = "language")
+    @Column(name = "template_code")
+    private Map<String, String> templates = new HashMap<>();
 
 }

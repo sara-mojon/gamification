@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "react-oidc-context";
 import Editor from "@monaco-editor/react";
 import { ChevronLeft, Play, CheckCircle } from "lucide-react";
+import ReactMarkdown from "react-markdown";
 
 interface Reto {
   id?: string;
@@ -118,10 +119,12 @@ export default function Entrenar() {
           Descripción del problema
         </h3>
         
-        <div 
-          style={{ color: "#555", lineHeight: "1.6", fontSize: "1.1rem", marginTop: "10px" }}
-          dangerouslySetInnerHTML={{ __html: retoActual.description || "Sin descripción" }}
-        />
+        {/* Contenedor para el Markdown */}
+        <div style={{ color: "#555", lineHeight: "1.6", fontSize: "1.05rem", marginTop: "10px", overflowWrap: "break-word" }}>
+          <ReactMarkdown>
+            {retoActual.description || "Sin descripción"}
+          </ReactMarkdown>
+        </div>
 
         <div style={{ marginTop: "auto", paddingTop: "30px" }}>
             <div style={{ backgroundColor: "#1e1e1e", color: "#fff", borderRadius: "8px", padding: "20px", minHeight: "150px" }}>
