@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import es.masorange.backend.model.BasicResponseDTO;
 import es.masorange.backend.model.Challenge;
@@ -34,6 +35,11 @@ public class ChallengeController {
     @PostMapping("/import/{id}")
     public CodeWarsChallengeDTO importChallengeFromCodeWars(@PathVariable String id) {
         return challengeService.importChallengeFromCodeWars(id);
+    }
+
+    @PostMapping("/import/excel")
+    public BasicResponseDTO importChallengesFromFile(@RequestParam("file") MultipartFile file) {
+        return challengeService.importChallengesFromCsv(file);
     }
 
     @PostMapping("/generate/challenge")

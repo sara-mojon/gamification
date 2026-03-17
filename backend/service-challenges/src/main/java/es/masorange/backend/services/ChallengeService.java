@@ -1,9 +1,14 @@
 package es.masorange.backend.services;
 
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.reactive.function.client.WebClient;
 
 import es.masorange.backend.model.*;
@@ -98,5 +103,64 @@ public class ChallengeService {
             return new BasicResponseDTO("Challenge actualizado correctamente", "200");
 
         }).orElseGet(() -> new BasicResponseDTO("No se encontró el challenge con id: " + id, "404"));
+    }
+
+    public BasicResponseDTO importChallengesFromCsv(MultipartFile file) {
+        if (file.isEmpty()) {
+            return new BasicResponseDTO("El archivo está vacío", "400");
+        }
+
+        List<String> idsAImportar = new ArrayList<>();
+
+        try (BufferedReader reader = new BufferedReader(
+                new InputStreamReader(file.getInputStream(), StandardCharsets.UTF_8))) {
+            String linea;
+            boolean primeraLinea = true;
+
+            while ((linea = reader.readLine()) != null) {
+                if (primeraLinea && (linea.toLowerCase().contains("id") || linea.toLowerCase().contains("slug"))) {
+                    primeraLinea = false;
+                    continue;
+                }
+                primeraLinea = false;
+                String idLimpiado = linea.trim();
+                if (idLimpiado.contains(",")) {
+                    idLimpiado = idLimpiado.split(",")[0].trim();
+                } else if (idLimpiado.contains(";")) {
+                    idLimpiado = idLimpiado.split(";")[0].trim();
+                }
+                if (!idLimpiado.isEmpty()) {
+                    idsAImportar.add(idLimpiado);
+                }
+            }
+        } catch (Exception e) {
+            return new BasicResponseDTO("Error al leer el archivo CSV: " + e.getMessage(), "500");
+        }
+
+        if (idsAImportar.isEmpty()) {
+            return new BasicResponseDTO("No se encontraron IDs válidos en el archivo", "400");
+        }
+
+        int exitos = 0;
+        List<String> errores = new ArrayList<>();
+        for (String id : idsAImportar) {
+            try {
+                this.importChallengeFromCodeWars(id);
+                exitos++;
+            } catch (Exception e) {
+                errores.add(id);
+                System.err.println("Fallo al importar el ID " + id + " desde el CSV: " + e.getMessage());
+            }
+        }
+
+        if (exitos == 0) {
+            return new BasicResponseDTO("No se pudo importar ningún reto. Fallaron los " + errores.size() + " IDs.",
+                    "400");
+        } else if (!errores.isEmpty()) {
+            return new BasicResponseDTO("Importación parcial. Éxitos: " + exitos + ". Fallos: " + errores.size(),
+                    "207"); // 207 = Multi-Status
+        }
+
+        return new BasicResponseDTO("Los " + exitos + " retos se importaron correctamente", "200");
     }
 }

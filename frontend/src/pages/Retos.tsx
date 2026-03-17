@@ -149,6 +149,7 @@ export default function Retos() {
         // Usamos FormData para empaquetar el archivo como si fuera un formulario HTML real
         const dataFormulario = new FormData();
         dataFormulario.append("file", archivoExcel);
+        
         const response = await fetch(`http://localhost:8081/api/challenges/import/excel`, {
           method: "POST",
           headers: { 'Authorization': `Bearer ${token}` },
@@ -157,7 +158,8 @@ export default function Retos() {
 
         setCargandoAccion(false);
 
-        if (response.ok) {
+        const datos = await response.json();
+        if (datos.status === "200" || datos.status === "207") {
           setArchivoExcel(null);
           setImportIds([""]);
           setExitoAccion(true);
@@ -166,8 +168,8 @@ export default function Retos() {
           setArchivoExcel(null);
           setModalAviso({ 
               abierto: true, 
-              titulo: "Error en el Archivo", 
-              mensaje: "El servidor no pudo procesar el Excel. Asegúrate de que el formato es correcto." 
+              titulo: "Atención", 
+              mensaje: datos.message || "El servidor no pudo procesar el Excel. Asegúrate de que el formato es correcto." 
           });
         }
       } catch {
@@ -199,7 +201,6 @@ export default function Retos() {
 
       const respuestas = await Promise.all(peticiones);
       setCargandoAccion(false);
-
       const todasOk = respuestas.every(r => r.ok);
 
       if (todasOk) {
@@ -239,6 +240,8 @@ export default function Retos() {
       if (response.ok) {
         setRetos(retos.filter(r => r.id !== modalEliminar.id));
         setModalEliminar({ abierto: false, id: "", titulo: "" });
+        //setExitoAccion(true);
+        //setTimeout(() => setExitoAccion(false), 1500);
       } else {
         setModalEliminar({ abierto: false, id: "", titulo: "" });
         setModalAviso({ abierto: true, titulo: "Error", mensaje: "El servidor no pudo eliminar el reto." });
@@ -282,8 +285,33 @@ export default function Retos() {
         },
         body: JSON.stringify(payload)
       });
+      
       if (response.ok) {
-        window.location.reload(); 
+        let nuevaDificultad = "Normal";
+        let nuevoColor = "#ff9800"; 
+        let nuevoTiempo = 20;
+        if (payload.rank >= 7) { nuevaDificultad = "Fácil"; nuevoColor = "#4caf50"; nuevoTiempo = 10; } 
+        else if (payload.rank <= 4) { nuevaDificultad = "Difícil"; nuevoColor = "#ff4b4b"; nuevoTiempo = 45; }
+
+        setRetos(retos.map(r => r.id === modalEditar.id ? { 
+            ...r, 
+            titulo: payload.name,
+            descripcionOriginal: payload.description,
+            descripcion: payload.description.replace(/<[^>]+>/g, '').substring(0, 150) + "...",
+            rangoRaw: payload.rank,
+            dificultad: nuevaDificultad,
+            colorDificultad: nuevoColor,
+            tiempoEstimado: nuevoTiempo,
+            isVisible: payload.isVisible,
+            etiquetas: payload.tags,
+            tests: payload.tests,
+            tieneTests: tieneTests
+        } : r));
+
+        setModalEditar({ abierto: false, id: "" });
+        //setExitoAccion(true);
+        //setTimeout(() => setExitoAccion(false), 1500);
+
       } else {
         setModalEditar({ abierto: false, id: "" });
         setModalAviso({ abierto: true, titulo: "Error", mensaje: "El servidor no pudo guardar los cambios." });
@@ -311,6 +339,8 @@ export default function Retos() {
       });
       if (response.ok) {
         setRetos(retos.map(r => r.id === reto.id ? { ...r, isVisible: !reto.isVisible } : r));
+        //setExitoAccion(true);
+        //setTimeout(() => setExitoAccion(false), 1500);
       }
     } catch {
       setModalAviso({ abierto: true, titulo: "Error", mensaje: "Error al cambiar la visibilidad." });
@@ -324,9 +354,10 @@ export default function Retos() {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (response.ok) {
-        alert("¡Tests generados con éxito!"); 
+        setRetos(retos.map(r => r.id === modalGenerar.id ? { ...r, tieneTests: true } : r));
         setModalGenerar({ abierto: false, id: "", titulo: "" });
-        window.location.reload(); 
+        setExitoAccion(true);
+        setTimeout(() => setExitoAccion(false), 1500);
       } else {
         setModalGenerar({ abierto: false, id: "", titulo: "" }); 
         setModalAviso({ abierto: true, titulo: "En desarrollo", mensaje: "Aún estamos construyendo el backend de IA, pero la llamada ha llegado al puerto." });
