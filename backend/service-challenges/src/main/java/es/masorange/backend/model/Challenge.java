@@ -2,10 +2,11 @@ package es.masorange.backend.model;
 
 import java.util.*;
 
-import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.annotations.*;
 import org.hibernate.type.SqlTypes;
-
+import java.time.LocalDateTime;
 import jakarta.persistence.*;
+import jakarta.persistence.Table;
 import lombok.*;
 
 @Entity
@@ -36,6 +37,14 @@ public class Challenge {
     @JdbcTypeCode(SqlTypes.ARRAY)
     @Column(name = "tags", columnDefinition = "text[]")
     private List<String> tags;
+
+    @CreationTimestamp
+    @Column(name = "created_at", updatable = false)
+    private LocalDateTime createdAt;
+
+    @UpdateTimestamp
+    @Column(name = "updated_at")
+    private LocalDateTime updatedAt;
 
     @ElementCollection
     @CollectionTable(name = "challenge_languages", joinColumns = @JoinColumn(name = "challenge_id"))

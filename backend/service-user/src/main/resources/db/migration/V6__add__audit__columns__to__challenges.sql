@@ -1,0 +1,4 @@
+-- Añadir campos a la tabla principal
+ALTER TABLE challenges 
+ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;

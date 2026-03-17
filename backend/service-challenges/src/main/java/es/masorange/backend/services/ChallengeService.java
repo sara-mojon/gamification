@@ -9,6 +9,7 @@ import java.util.Optional;
 
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
+import org.apache.poi.ss.usermodel.*;
 import org.springframework.web.reactive.function.client.WebClient;
 
 import es.masorange.backend.model.*;
@@ -105,62 +106,128 @@ public class ChallengeService {
         }).orElseGet(() -> new BasicResponseDTO("No se encontró el challenge con id: " + id, "404"));
     }
 
-    public BasicResponseDTO importChallengesFromCsv(MultipartFile file) {
+    public BasicResponseDTO importChallengesFromFile(MultipartFile file) {
         if (file.isEmpty()) {
             return new BasicResponseDTO("El archivo está vacío", "400");
         }
 
         List<String> idsAImportar = new ArrayList<>();
+        String filename = file.getOriginalFilename();
 
-        try (BufferedReader reader = new BufferedReader(
-                new InputStreamReader(file.getInputStream(), StandardCharsets.UTF_8))) {
-            String linea;
-            boolean primeraLinea = true;
+        try {
+            // --- LÓGICA PARA EXCEL (.xlsx o .xls) ---
+            if (filename != null && (filename.endsWith(".xlsx") || filename.endsWith(".xls"))) {
+                try (Workbook workbook = WorkbookFactory.create(file.getInputStream())) {
+                    // Cogemos la primera hoja (pestaña) del Excel
+                    Sheet sheet = workbook.getSheetAt(0);
+                    boolean primeraLinea = true;
 
-            while ((linea = reader.readLine()) != null) {
-                if (primeraLinea && (linea.toLowerCase().contains("id") || linea.toLowerCase().contains("slug"))) {
-                    primeraLinea = false;
-                    continue;
+                    for (Row row : sheet) {
+                        Cell cell = row.getCell(0);
+                        if (cell == null)
+                            continue;
+
+                        String valorCelda = "";
+                        if (cell.getCellType() == CellType.STRING) {
+                            valorCelda = cell.getStringCellValue().trim();
+                        } else if (cell.getCellType() == CellType.NUMERIC) {
+                            valorCelda = String.valueOf((long) cell.getNumericCellValue());
+                        }
+
+                        if (primeraLinea && (valorCelda.toLowerCase().contains("id")
+                                || valorCelda.toLowerCase().contains("slug"))) {
+                            primeraLinea = false;
+                            continue;
+                        }
+                        primeraLinea = false;
+
+                        if (!valorCelda.isEmpty()) {
+                            idsAImportar.add(valorCelda);
+                        }
+                    }
                 }
-                primeraLinea = false;
-                String idLimpiado = linea.trim();
-                if (idLimpiado.contains(",")) {
-                    idLimpiado = idLimpiado.split(",")[0].trim();
-                } else if (idLimpiado.contains(";")) {
-                    idLimpiado = idLimpiado.split(";")[0].trim();
-                }
-                if (!idLimpiado.isEmpty()) {
-                    idsAImportar.add(idLimpiado);
+            }
+            // --- LÓGICA PARA CSV ---
+            else {
+                try (BufferedReader reader = new BufferedReader(
+                        new InputStreamReader(file.getInputStream(), StandardCharsets.UTF_8))) {
+                    String linea;
+                    boolean primeraLinea = true;
+
+                    while ((linea = reader.readLine()) != null) {
+                        if (primeraLinea
+                                && (linea.toLowerCase().contains("id") || linea.toLowerCase().contains("slug"))) {
+                            primeraLinea = false;
+                            continue;
+                        }
+                        primeraLinea = false;
+
+                        String idLimpiado = linea.trim();
+
+                        if (idLimpiado.contains(",")) {
+                            idLimpiado = idLimpiado.split(",")[0].trim();
+                        } else if (idLimpiado.contains(";")) {
+                            idLimpiado = idLimpiado.split(";")[0].trim();
+                        }
+
+                        if (!idLimpiado.isEmpty()) {
+                            idsAImportar.add(idLimpiado);
+                        }
+                    }
                 }
             }
         } catch (Exception e) {
-            return new BasicResponseDTO("Error al leer el archivo CSV: " + e.getMessage(), "500");
+            return new BasicResponseDTO("Error al leer el archivo: " + e.getMessage(), "500");
         }
 
         if (idsAImportar.isEmpty()) {
             return new BasicResponseDTO("No se encontraron IDs válidos en el archivo", "400");
         }
 
-        int exitos = 0;
-        List<String> errores = new ArrayList<>();
+        // --- IMPORTACIÓN DE LOS RETOS ---
+        List<String> detallesExitos = new ArrayList<>();
+        List<String> detallesErrores = new ArrayList<>();
+
         for (String id : idsAImportar) {
             try {
                 this.importChallengeFromCodeWars(id);
-                exitos++;
+                detallesExitos.add("  • ID: " + id);
             } catch (Exception e) {
-                errores.add(id);
-                System.err.println("Fallo al importar el ID " + id + " desde el CSV: " + e.getMessage());
+                String errorMsg = e.getMessage();
+
+                if (errorMsg != null) {
+                    if (errorMsg.contains("404 Not Found")) {
+                        errorMsg = "404 Not Found";
+                    } else if (errorMsg.contains("from GET")) {
+                        errorMsg = errorMsg.split("from GET")[0].trim();
+                    }
+                } else {
+                    errorMsg = "Error desconocido";
+                }
+                detallesErrores.add("  • ID: " + id + " - " + errorMsg);
+                System.err.println("Fallo al importar el ID " + id + " desde el archivo: " + e.getMessage());
             }
         }
 
-        if (exitos == 0) {
-            return new BasicResponseDTO("No se pudo importar ningún reto. Fallaron los " + errores.size() + " IDs.",
-                    "400");
-        } else if (!errores.isEmpty()) {
-            return new BasicResponseDTO("Importación parcial. Éxitos: " + exitos + ". Fallos: " + errores.size(),
-                    "207"); // 207 = Multi-Status
+        StringBuilder mensajeFinal = new StringBuilder();
+        if (!detallesExitos.isEmpty()) {
+            mensajeFinal.append("✅ Éxitos: ").append(detallesExitos.size()).append("\n");
+            mensajeFinal.append(String.join("\n", detallesExitos)).append("\n\n");
+        }
+        if (!detallesErrores.isEmpty()) {
+            mensajeFinal.append("⚠️ Errores: ").append(detallesErrores.size()).append("\n");
+            mensajeFinal.append(String.join("\n", detallesErrores));
         }
 
-        return new BasicResponseDTO("Los " + exitos + " retos se importaron correctamente", "200");
+        if (detallesExitos.isEmpty()) {
+            return new BasicResponseDTO(mensajeFinal.toString().trim(), "400");
+        } else if (!detallesErrores.isEmpty()) {
+            return new BasicResponseDTO(mensajeFinal.toString().trim(), "207");
+        }
+        return new BasicResponseDTO(mensajeFinal.toString().trim(), "200");
+    }
+
+    public BasicResponseDTO generateTestsWithAI(String id) {
+        return new BasicResponseDTO("hola", "200");
     }
 }

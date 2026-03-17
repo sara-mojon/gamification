@@ -1,7 +1,6 @@
 package es.masorange.backend.controller;
 
 import java.util.List;
-import java.util.Optional;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CrossOrigin;
@@ -39,7 +38,7 @@ public class ChallengeController {
 
     @PostMapping("/import/excel")
     public BasicResponseDTO importChallengesFromFile(@RequestParam("file") MultipartFile file) {
-        return challengeService.importChallengesFromCsv(file);
+        return challengeService.importChallengesFromFile(file);
     }
 
     @PostMapping("/generate/challenge")
@@ -48,8 +47,8 @@ public class ChallengeController {
     }
 
     @PostMapping("/generate/test/{id}")
-    public String generateTestforChallenge(@PathVariable String id) {
-        return new String();
+    public BasicResponseDTO generateTestForChallenge(@PathVariable String id) {
+        return challengeService.generateTestsWithAI(id);
     }
 
     @GetMapping("/")

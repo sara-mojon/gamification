@@ -53,9 +53,8 @@ export default function Retos() {
   const [modalImportar, setModalImportar] = useState(false);
   const [importIds, setImportIds] = useState<string[]>([""]); 
   const [archivoExcel, setArchivoExcel] = useState<File | null>(null);
-
   const [modalGenerarReto, setModalGenerarReto] = useState(false);
-  const [modalAviso, setModalAviso] = useState({ abierto: false, titulo: "", mensaje: "" });
+  const [modalAviso, setModalAviso] = useState({ abierto: false, titulo: "", mensaje: "", recargar: false });
 
   const [cargandoAccion, setCargandoAccion] = useState(false);
   const [exitoAccion, setExitoAccion] = useState(false);
@@ -146,7 +145,6 @@ export default function Retos() {
       setCargandoAccion(true);
 
       try {
-        // Usamos FormData para empaquetar el archivo como si fuera un formulario HTML real
         const dataFormulario = new FormData();
         dataFormulario.append("file", archivoExcel);
         
@@ -157,19 +155,31 @@ export default function Retos() {
         });
 
         setCargandoAccion(false);
-
         const datos = await response.json();
-        if (datos.status === "200" || datos.status === "207") {
+
+        if (datos.status === "200") {
           setArchivoExcel(null);
           setImportIds([""]);
           setExitoAccion(true);
           setTimeout(() => { window.location.reload(); }, 1500);
-        } else {
+        } 
+        else if (datos.status === "207") {
+          setArchivoExcel(null);
+          setImportIds([""]);
+          setModalAviso({ 
+              abierto: true, 
+              titulo: "Atención - Importación Parcial", 
+              mensaje: datos.message, 
+              recargar: true
+          });
+        } 
+        else {
           setArchivoExcel(null);
           setModalAviso({ 
               abierto: true, 
               titulo: "Atención", 
-              mensaje: datos.message || "El servidor no pudo procesar el Excel. Asegúrate de que el formato es correcto." 
+              mensaje: datos.message || "El servidor no pudo procesar el Excel. Asegúrate de que el formato es correcto.",
+              recargar: false
           });
         }
       } catch {
@@ -178,7 +188,8 @@ export default function Retos() {
         setModalAviso({ 
             abierto: true, 
             titulo: "Error de Conexión", 
-            mensaje: "No se ha podido conectar con el servidor para enviar el archivo." 
+            mensaje: "No se ha podido conectar con el servidor para enviar el archivo.",
+            recargar: false
         });
       }
       return;
@@ -201,33 +212,82 @@ export default function Retos() {
 
       const respuestas = await Promise.all(peticiones);
       setCargandoAccion(false);
-      const todasOk = respuestas.every(r => r.ok);
 
-      if (todasOk) {
+      const detallesExitos: string[] = [];
+      const detallesErrores: string[] = [];
+
+      for (let i = 0; i < respuestas.length; i++) {
+        const res = respuestas[i];
+        const id = idsValidos[i];
+
+        if (res.ok) {
+          detallesExitos.push(`  • ID: ${id}`);
+        } else {
+          let errorMsg = "Error desconocido";
+          try {
+            const datosError = await res.json();
+            errorMsg = datosError.message || errorMsg;
+          } catch {
+            errorMsg = "Error interno del servidor (500)";
+          }
+          
+          if (errorMsg.includes("404 Not Found")) {
+            errorMsg = "404 Not Found";
+          } else if (errorMsg.includes("from GET")) {
+            errorMsg = errorMsg.split("from GET")[0].trim();
+          }
+
+          detallesErrores.push(`  • ID: ${id} - ${errorMsg}`);
+        }
+      }
+
+      let mensajeFinal = "";
+      if (detallesExitos.length > 0) {
+        mensajeFinal += `✅ Éxitos: ${detallesExitos.length}\n${detallesExitos.join("\n")}\n\n`;
+      }
+      if (detallesErrores.length > 0) {
+        mensajeFinal += `⚠️ Errores: ${detallesErrores.length}\n${detallesErrores.join("\n")}`;
+      }
+      mensajeFinal = mensajeFinal.trim();
+
+      // Evaluamos los resultados
+      if (detallesErrores.length === 0) {
         setImportIds([""]); 
         setExitoAccion(true);
         setTimeout(() => { window.location.reload(); }, 1500);
-      } else {
+      } 
+      else if (detallesExitos.length === 0) {
+        setImportIds([""]);
+        setModalAviso({ 
+            abierto: true, 
+            titulo: "Atención", 
+            mensaje: mensajeFinal,
+            recargar: false
+        });
+      } 
+      else {
         setImportIds([""]);
         setModalAviso({ 
             abierto: true, 
             titulo: "Importación Parcial", 
-            mensaje: "Algunos retos se importaron correctamente, pero hubo errores con otros. Revisa los IDs que fallaron." 
+            mensaje: mensajeFinal,
+            recargar: true
         });
-        setTimeout(() => { window.location.reload(); }, 3000);
       }
+
     } catch {
       setCargandoAccion(false); 
       setModalAviso({ 
           abierto: true, 
           titulo: "Error de Conexión", 
-          mensaje: "No se ha podido conectar con el servidor al intentar importar." 
+          mensaje: "No se ha podido conectar con el servidor al intentar importar.",
+          recargar: false
       });
     }
   };
 
   const ejecutarGenerarReto = async () => {
-    setModalAviso({ abierto: true, titulo: "Próximamente", mensaje: "¡La IA construirá un reto desde cero para ti muy pronto!" });
+    setModalAviso({ abierto: true, titulo: "Próximamente", mensaje: "¡La IA construirá un reto desde cero para ti muy pronto!", recargar: false });
     setModalGenerarReto(false);
   };
 
@@ -240,15 +300,13 @@ export default function Retos() {
       if (response.ok) {
         setRetos(retos.filter(r => r.id !== modalEliminar.id));
         setModalEliminar({ abierto: false, id: "", titulo: "" });
-        //setExitoAccion(true);
-        //setTimeout(() => setExitoAccion(false), 1500);
       } else {
         setModalEliminar({ abierto: false, id: "", titulo: "" });
-        setModalAviso({ abierto: true, titulo: "Error", mensaje: "El servidor no pudo eliminar el reto." });
+        setModalAviso({ abierto: true, titulo: "Error", mensaje: "El servidor no pudo eliminar el reto.", recargar: false });
       }
     } catch {
       setModalEliminar({ abierto: false, id: "", titulo: "" });
-      setModalAviso({ abierto: true, titulo: "Error", mensaje: "Error de conexión al intentar eliminar el reto." });
+      setModalAviso({ abierto: true, titulo: "Error", mensaje: "Error de conexión al intentar eliminar el reto.", recargar: false });
     }
   };
 
@@ -260,7 +318,8 @@ export default function Retos() {
       setModalAviso({ 
         abierto: true, 
         titulo: "Publicación Bloqueada", 
-        mensaje: "No puedes guardar este reto como Público. Debes añadir al menos un test oculto para que los usuarios puedan validar su código." 
+        mensaje: "No puedes guardar este reto como Público. Debes añadir al menos un test oculto para que los usuarios puedan validar su código.",
+        recargar: false 
       });
       return;
     }
@@ -309,16 +368,13 @@ export default function Retos() {
         } : r));
 
         setModalEditar({ abierto: false, id: "" });
-        //setExitoAccion(true);
-        //setTimeout(() => setExitoAccion(false), 1500);
-
       } else {
         setModalEditar({ abierto: false, id: "" });
-        setModalAviso({ abierto: true, titulo: "Error", mensaje: "El servidor no pudo guardar los cambios." });
+        setModalAviso({ abierto: true, titulo: "Error", mensaje: "El servidor no pudo guardar los cambios.", recargar: false });
       }
     } catch {
       setModalEditar({ abierto: false, id: "" });
-      setModalAviso({ abierto: true, titulo: "Error", mensaje: "Error de conexión al intentar editar el reto." });
+      setModalAviso({ abierto: true, titulo: "Error", mensaje: "Error de conexión al intentar editar el reto.", recargar: false });
     }
   };
 
@@ -339,11 +395,9 @@ export default function Retos() {
       });
       if (response.ok) {
         setRetos(retos.map(r => r.id === reto.id ? { ...r, isVisible: !reto.isVisible } : r));
-        //setExitoAccion(true);
-        //setTimeout(() => setExitoAccion(false), 1500);
       }
     } catch {
-      setModalAviso({ abierto: true, titulo: "Error", mensaje: "Error al cambiar la visibilidad." });
+      setModalAviso({ abierto: true, titulo: "Error", mensaje: "Error al cambiar la visibilidad.", recargar: false });
     }
   };
 
@@ -360,11 +414,11 @@ export default function Retos() {
         setTimeout(() => setExitoAccion(false), 1500);
       } else {
         setModalGenerar({ abierto: false, id: "", titulo: "" }); 
-        setModalAviso({ abierto: true, titulo: "En desarrollo", mensaje: "Aún estamos construyendo el backend de IA, pero la llamada ha llegado al puerto." });
+        setModalAviso({ abierto: true, titulo: "En desarrollo", mensaje: "Aún estamos construyendo el backend de IA, pero la llamada ha llegado al puerto.", recargar: false });
       }
     } catch {
       setModalGenerar({ abierto: false, id: "", titulo: "" });
-      setModalAviso({ abierto: true, titulo: "Error de Conexión", mensaje: "Error de red intentando generar el test." });
+      setModalAviso({ abierto: true, titulo: "Error de Conexión", mensaje: "Error de red intentando generar el test.", recargar: false });
     }
   };
 
@@ -445,13 +499,19 @@ export default function Retos() {
       {modalAviso.abierto && (
         <div style={overlayStyle}>
           <div style={modalStyle}>
-            <button style={btnCerrarStyle} onClick={() => setModalAviso({ abierto: false, titulo: "", mensaje: "" })}><X size={24} /></button>
+            <button style={btnCerrarStyle} onClick={() => {
+                if (modalAviso.recargar) window.location.reload();
+                setModalAviso({ abierto: false, titulo: "", mensaje: "", recargar: false });
+            }}><X size={24} /></button>
             <h2 style={{ marginTop: 0, color: "#d32f2f", display: "flex", alignItems: "center", gap: "10px" }}><AlertTriangle size={24}/> {modalAviso.titulo}</h2>
-            <p style={{ fontSize: "1.1rem", color: "#333", lineHeight: "1.5", marginTop: "15px" }}>
+            <p style={{ fontSize: "1.05rem", color: "#333", lineHeight: "1.5", marginTop: "15px", whiteSpace: "pre-wrap", maxHeight: "300px", overflowY: "auto" }}>
               {modalAviso.mensaje}
             </p>
             <div style={{ display: "flex", gap: "15px", marginTop: "30px", justifyContent: "flex-end" }}>
-              <button onClick={() => setModalAviso({ abierto: false, titulo: "", mensaje: "" })} style={{ padding: "10px 20px", borderRadius: "6px", border: "none", background: "#d32f2f", color: "white", cursor: "pointer", fontWeight: "bold" }}>Aceptar</button>
+              <button onClick={() => {
+                  if (modalAviso.recargar) window.location.reload();
+                  setModalAviso({ abierto: false, titulo: "", mensaje: "", recargar: false });
+              }} style={{ padding: "10px 20px", borderRadius: "6px", border: "none", background: "#d32f2f", color: "white", cursor: "pointer", fontWeight: "bold" }}>Aceptar</button>
             </div>
           </div>
         </div>
@@ -506,33 +566,33 @@ export default function Retos() {
               </button>
             </div>
 
-            {/* SECCIÓN 2: Archivo Excel */}
+            {/* SECCIÓN 2: Archivo Excel o CSV */}
             <div style={{ marginTop: "25px", borderTop: "1px solid #eee", paddingTop: "20px" }}>
               <label style={{ display: "flex", marginBottom: "10px", fontWeight: "bold", color: "#555", alignItems: "center", gap: "8px" }}>
-                <FileUp size={18} /> Sube tu archivo Excel (.xlsx)
+                <FileUp size={18} /> Importar desde archivo
               </label>
-              
-              {/* Para limpiar los IDs si subimos un archivo, damos prioridad al archivo */}
               <input 
                 type="file" 
                 accept=".xlsx, .xls, .csv" 
                 onChange={(e) => {
                   const file = e.target.files ? e.target.files[0] : null;
                   setArchivoExcel(file);
-                  if (file) setImportIds([""]); // Si sube archivo, vaciamos los textos para no confundir
+                  if (file) setImportIds([""]); 
                 }}
                 style={{ 
                   display: "block", width: "100%", padding: "10px", border: "2px dashed #ccc", 
                   borderRadius: "8px", backgroundColor: "#fafafa", cursor: "pointer", fontSize: "0.95rem", color: "#555"
                 }}
               />
+              <span style={{ display: "block", marginTop: "8px", fontSize: "0.85rem", color: "#888", textAlign: "center" }}>
+                Formatos soportados: Excel (.xlsx, .xls) o CSV (.csv)
+              </span>
             </div>
 
             {/* BOTONES DE ACCIÓN */}
             <div style={{ display: "flex", gap: "15px", marginTop: "30px", justifyContent: "flex-end" }}>
               <button onClick={() => { setModalImportar(false); setImportIds([""]); setArchivoExcel(null); }} style={{ padding: "10px 20px", borderRadius: "6px", border: "1px solid #ddd", background: "white", cursor: "pointer", fontWeight: "bold" }}>Cancelar</button>
               
-              {/* El botón se activa si hay un archivo o si hay al menos una cajita con texto */}
               <button 
                 onClick={ejecutarImportar} 
                 disabled={!archivoExcel && importIds.filter(id => id.trim() !== "").length === 0} 
