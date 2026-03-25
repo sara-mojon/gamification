@@ -2,11 +2,13 @@ import { useState, useEffect } from "react";
 import { Terminal, Clock, ChevronRight, Search, Filter, ChevronLeft, Wand2, Pencil, Trash2, X, Eye, EyeOff, AlertTriangle, Download, Loader2, CheckCircle2, Plus, FileUp } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "react-oidc-context";
+import toast from 'react-hot-toast';
 
 const ITEMS_POR_PAGINA = 10;
 
 interface BackendChallenge {
   id: string;
+  idCodeWars: string;
   name: string;
   slug: string;
   description: string;
@@ -401,25 +403,44 @@ export default function Retos() {
     }
   };
 
-  const ejecutarGenerarTest = async () => {
-    try {
-      const response = await fetch(`http://localhost:8081/api/challenges/generate/test/${modalGenerar.id}`, {
-        method: "POST",
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (response.ok) {
-        setRetos(retos.map(r => r.id === modalGenerar.id ? { ...r, tieneTests: true } : r));
-        setModalGenerar({ abierto: false, id: "", titulo: "" });
-        setExitoAccion(true);
-        setTimeout(() => setExitoAccion(false), 1500);
-      } else {
-        setModalGenerar({ abierto: false, id: "", titulo: "" }); 
-        setModalAviso({ abierto: true, titulo: "En desarrollo", mensaje: "Aún estamos construyendo el backend de IA, pero la llamada ha llegado al puerto.", recargar: false });
+  const generarTestsConIA = (retoId: string, tituloReto: string) => {
+    if (!token) return;
+
+    const peticionIA = fetch(`http://localhost:8081/api/challenges/generate/test/${retoId}`, {
+      method: "POST",
+      headers: { 'Authorization': `Bearer ${token}` }
+    }).then(async (res) => {
+      if (!res.ok) throw new Error("Fallo en el backend de IA");
+      const data = await res.json();
+      
+      setRetos(retosActuales => 
+        retosActuales.map(r => r.id === retoId ? { ...r, tieneTests: true } : r)
+      );
+      
+      return data;
+    });
+
+    toast.promise(
+      peticionIA,
+      {
+        loading: `🧠 Qwen2.5 está escribiendo los tests para "${tituloReto}"... (Esto puede tardar un rato)`,
+        success: `¡Tests generados con éxito para "${tituloReto}"! `,
+        error: `Hubo un problema al generar los tests para "${tituloReto}" `,
+      },
+      {
+        style: {
+          minWidth: '350px',
+          backgroundColor: '#1e1e1e',
+          color: '#fff',
+          border: '1px solid #333',
+          fontSize: '0.95rem'
+        },
+        success: {
+          duration: 5000,
+          icon: '✅',
+        },
       }
-    } catch {
-      setModalGenerar({ abierto: false, id: "", titulo: "" });
-      setModalAviso({ abierto: true, titulo: "Error de Conexión", mensaje: "Error de red intentando generar el test.", recargar: false });
-    }
+    );
   };
 
   const abrirModalEditar = (reto: FrontendChallenge) => {
@@ -671,7 +692,19 @@ export default function Retos() {
             </p>
             <div style={{ display: "flex", gap: "15px", marginTop: "30px", justifyContent: "flex-end" }}>
               <button onClick={() => setModalGenerar({ abierto: false, id: "", titulo: "" })} style={{ padding: "10px 20px", borderRadius: "6px", border: "1px solid #ddd", background: "white", cursor: "pointer", fontWeight: "bold" }}>Cancelar</button>
-              <button onClick={ejecutarGenerarTest} style={{ padding: "10px 20px", borderRadius: "6px", border: "none", background: "#673ab7", color: "white", cursor: "pointer", fontWeight: "bold" }}>Generar Tests</button>
+              <button 
+                onClick={(e) => {
+                  e.currentTarget.innerText = "Iniciando IA...";
+                  e.currentTarget.style.opacity = "0.7";
+                  generarTestsConIA(modalGenerar.id, modalGenerar.titulo);
+                  setTimeout(() => {
+                    setModalGenerar({ abierto: false, id: "", titulo: "" });
+                  }, 500);
+                }} 
+                style={{ padding: "10px 20px", borderRadius: "6px", border: "none", background: "#673ab7", color: "white", cursor: "pointer", fontWeight: "bold", transition: "all 0.2s" }}
+              >
+                Generar Tests
+              </button>
             </div>
           </div>
         </div>
@@ -740,7 +773,6 @@ export default function Retos() {
                     <option value="javascript">JavaScript</option>
                     <option value="java">Java</option>
                     <option value="c">C</option>
-                    <option value="csharp">C#</option>
                   </select>
                 </div>
 

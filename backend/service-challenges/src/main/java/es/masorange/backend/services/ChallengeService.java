@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Optional;
 
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 import org.apache.poi.ss.usermodel.*;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -43,7 +44,7 @@ public class ChallengeService {
     }
 
     public BasicResponseDTO saveChallenge(CodeWarsChallengeDTO dto) {
-        Optional<Challenge> challenge = challengeRepository.findById(dto.id());
+        Optional<Challenge> challenge = challengeRepository.findByIdCodeWars(dto.id());
 
         if (challenge.isPresent()) {
             return new BasicResponseDTO("El challenge ya existe en la BBDD", "409");
@@ -51,7 +52,7 @@ public class ChallengeService {
 
         Challenge newChallenge = new Challenge();
 
-        newChallenge.setId(dto.id());
+        newChallenge.setIdCodeWars(dto.id());
         newChallenge.setName(dto.name());
         newChallenge.setSlug(dto.slug());
         newChallenge.setDescription(dto.description());
@@ -72,11 +73,11 @@ public class ChallengeService {
         return allChallenges;
     }
 
-    public Optional<Challenge> getChallenge(String id) {
+    public Optional<Challenge> getChallenge(Long id) {
         return challengeRepository.findById(id);
     }
 
-    public BasicResponseDTO deleteChallenge(String id) {
+    public BasicResponseDTO deleteChallenge(Long id) {
         Optional<Challenge> challenge = challengeRepository.findById(id);
 
         if (challenge.isPresent()) {
@@ -87,7 +88,7 @@ public class ChallengeService {
 
     }
 
-    public BasicResponseDTO updateChallenge(String id, Challenge dto) {
+    public BasicResponseDTO updateChallenge(Long id, Challenge dto) {
         return challengeRepository.findById(id).map(existing -> {
 
             Optional.ofNullable(dto.getName()).ifPresent(existing::setName);
@@ -227,7 +228,103 @@ public class ChallengeService {
         return new BasicResponseDTO(mensajeFinal.toString().trim(), "200");
     }
 
-    public BasicResponseDTO generateTestsWithAI(String id) {
-        return new BasicResponseDTO("hola", "200");
+    @Transactional
+    public BasicResponseDTO generateTestsWithAI(Long id) {
+        Optional<Challenge> challengeOpt = challengeRepository.findById(id);
+
+        if (challengeOpt.isEmpty()) {
+            return new BasicResponseDTO("No se encontró el challenge con id: " + id, "404");
+        }
+
+        Challenge challenge = challengeOpt.get();
+        String[] lenguajesObjetivo = { "javascript", "python", "java", "c" };
+
+        for (String lang : lenguajesObjetivo) {
+            System.out.println("Generando test para " + challenge.getName() + " en " + lang + "...");
+            try {
+                String testGenerado = callOllamaToGenerateTest(challenge, lang);
+
+                if (testGenerado != null && !testGenerado.trim().isEmpty()) {
+                    challenge.getTests().put(lang, testGenerado);
+                }
+
+            } catch (Exception e) {
+                System.err.println("Error generando test en " + lang + ": " + e.getMessage());
+            }
+        }
+
+        challengeRepository.save(challenge);
+        return new BasicResponseDTO("Tests generados correctamente.", "200");
     }
+
+    private String callOllamaToGenerateTest(Challenge challenge, String language) {
+        String prompt = buildUniversalPrompt(language, challenge.getName(), challenge.getDescription());
+        OllamaRequest requestBody = new OllamaRequest("qwen2.5-coder:7b", prompt, false);
+        WebClient ollamaClient = WebClient.builder().baseUrl("http://ollama-service:11434").build();
+
+        try {
+            OllamaResponse respuestaOllama = ollamaClient.post()
+                    .uri("/api/generate")
+                    .header("Content-Type", "application/json")
+                    .bodyValue(requestBody)
+                    .retrieve()
+                    .bodyToMono(OllamaResponse.class)
+                    .block();
+
+            if (respuestaOllama != null && respuestaOllama.response() != null) {
+                return cleanMarkdown(respuestaOllama.response());
+            }
+        } catch (Exception e) {
+            System.err.println("Fallo HTTP con Ollama: " + e.getMessage());
+        }
+
+        return "";
+    }
+
+    private String buildUniversalPrompt(String language, String title, String description) {
+        return """
+                You are a Senior QA Engineer.
+                Task: Write a COMPLETE standalone test script in %s that tests a user's solution.
+
+                MANDATORY RULES:
+                1. DO NOT define the solution function yourself. Assume the user's code (the solution) is already injected and available in the global scope.
+                2. DO NOT use external testing frameworks (like JUnit, Jest, PyTest, etc.). You must write a custom mini-framework because we need a specific custom JSON output.
+                3. You MUST catch all errors and assertions manually so the script does not crash before printing the final result.
+
+                JSON REPORTING FORMAT (CRITICAL):
+                Your script must collect the results of 4 to 6 robust test cases and print exactly ONE line to standard output (stdout) at the end of the execution. It must match this exact format:
+                ||JSON_RESULT||{"total": 2, "passed": 1, "failed": 1, "results": [{"name": "Test Basic", "status": "OK"}, {"name": "Test Edge Case", "status": "FAIL", "error": "Details..."}]}
+
+                IMPORTANT: If %s requires external libraries to build JSON (like Java, C, or C++ standard libraries), you MUST construct the JSON string manually using string concatenation/formatting and escape quotes properly.
+
+                INSTRUCTIONS:
+                1. Output the FULL script.
+                2. Focus on testing values, edge cases, and typical constraints for the problem: "%s".
+                3. Return ONLY valid, compilable %s code. NO markdown formatting, NO explanations, NO intro. Code only.
+
+                INPUT DESCRIPTION:
+                ---
+                %s
+                ---
+                Generate %s code now:
+                """
+                .formatted(language, language, title, language, description, language);
+    }
+
+    private String cleanMarkdown(String text) {
+        if (text == null)
+            return "";
+        String cleaned = text.trim();
+        if (cleaned.startsWith("```")) {
+            int firstNewLine = cleaned.indexOf('\n');
+            if (firstNewLine != -1) {
+                cleaned = cleaned.substring(firstNewLine + 1);
+            }
+            if (cleaned.endsWith("```")) {
+                cleaned = cleaned.substring(0, cleaned.length() - 3).trim();
+            }
+        }
+        return cleaned;
+    }
+
 }

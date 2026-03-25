@@ -30,6 +30,8 @@ export default function Perfil() {
     rangoGlobal: "-" 
   });
   
+  const [lenguajePreferido, setLenguajePreferido] = useState("java"); 
+  const [userId, setUserId] = useState<number | null>(null);
   const [cargando, setCargando] = useState(true);
 
   useEffect(() => {
@@ -45,13 +47,18 @@ export default function Perfil() {
 
         if (response.ok) {
           const misDatos = await response.json();
-          
+          setUserId(misDatos.id);
+
           setEstadisticas({
             puntos: misDatos.score || 0,
             retosCompletados: misDatos.retosCompletados || 0,
             rachaDias: 0, 
             rangoGlobal: "-" 
           });
+
+          if (misDatos.preferred_language) {
+            setLenguajePreferido(misDatos.preferred_language);
+          }
         } else {
           console.error("Error al cargar perfil:", response.status);
         }
@@ -64,6 +71,35 @@ export default function Perfil() {
 
     cargarMiPerfil();
   }, [token]);
+
+  const cambiarLenguaje = async (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const nuevoLenguaje = e.target.value;
+    setLenguajePreferido(nuevoLenguaje);
+
+    if (!userId) {
+      console.error("No se puede guardar: Aún no tenemos el ID del usuario.");
+      return;
+    }
+
+    try {
+      const response = await fetch(`http://localhost:8080/api/update/user/${userId}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ 
+          preferredLanguage: nuevoLenguaje 
+        })
+      });
+
+      if (!response.ok) {
+        console.error("Error al actualizar el lenguaje en el backend.");
+      }
+    } catch (error) {
+      console.error("Error de red intentando guardar", error);
+    }
+  };
 
   if (cargando) {
     return <div style={{ textAlign: "center", padding: "50px", color: "#666" }}>Cargando tu perfil... 🕵️‍♀️</div>;
@@ -118,6 +154,28 @@ export default function Perfil() {
                 <div style={{ display: "flex", alignItems: "center", color: "#555" }}><Activity size={18} style={{ marginRight: "10px", color: "#ff9800" }} /> Racha de días</div>
                 <strong style={{ fontSize: "1.2rem", color: "#1e1e1e" }}>{estadisticas.rachaDias} 🔥</strong>
               </div>
+            </div>
+          </div>
+
+          <div style={{ backgroundColor: "white", borderRadius: "10px", padding: "25px", boxShadow: "0 4px 6px rgba(0,0,0,0.05)", border: "1px solid #eaeaea" }}>
+            <h3 style={{ margin: "0 0 15px 0", fontSize: "1.2rem", color: "#333", borderBottom: "2px solid #f0f0f0", paddingBottom: "10px" }}>Preferencias</h3>
+            
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+              <label style={{ color: "#555", fontSize: "0.95rem", fontWeight: "bold" }}>Lenguaje de programación:</label>
+              <select 
+                value={lenguajePreferido}
+                onChange={cambiarLenguaje}
+                style={{ 
+                  padding: "10px", borderRadius: "6px", border: "1px solid #ccc", 
+                  backgroundColor: "#f9f9f9", fontSize: "1rem", outline: "none", cursor: "pointer",
+                  width: "100%"
+                }}
+              >
+                <option value="javascript">JavaScript</option>
+                <option value="python">Python</option>
+                <option value="java">Java</option>
+                <option value="c">C/C++</option>
+              </select>
             </div>
           </div>
 

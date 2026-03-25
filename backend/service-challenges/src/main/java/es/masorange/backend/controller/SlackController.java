@@ -2,6 +2,7 @@ package es.masorange.backend.controller;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
@@ -11,15 +12,22 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-
+import es.masorange.backend.model.Challenge;
+import es.masorange.backend.repository.ChallengeRepository;
+import es.masorange.backend.services.ChallengeService;
 import es.masorange.backend.services.SlackIntegrationService;
 
 @RestController
 @RequestMapping("/api/slack")
 public class SlackController {
 
-    @Autowired
-    private SlackIntegrationService slackService;
+    private final SlackIntegrationService slackService;
+    private final ChallengeRepository challengeRepository;
+
+    public SlackController(SlackIntegrationService slackService, ChallengeRepository challengeRepository) {
+        this.slackService = slackService;
+        this.challengeRepository = challengeRepository;
+    }
 
     // ==========================================================
     // 1. EVENTOS DE SLACK - Para el challenge y archivos
@@ -66,14 +74,23 @@ public class SlackController {
 
         switch (command) {
             case "/reto":
-                String tituloReto = "Contar vocales";
-                String urlReto = "http://localhost:5173/entrenar/4";
-                String mensajeReto = "¡Hola @" + userName + "! Aquí tienes un reto rápido para calentar:\n\n" +
-                        "👉 *" + tituloReto + "* (Fácil)\n" +
-                        "💻 Resuélvelo aquí: " + urlReto;
+                Optional<Challenge> retoOpt = challengeRepository.findRandomChallenge();
 
-                response.put("response_type", "ephemeral");
-                response.put("text", mensajeReto);
+                if (retoOpt.isPresent()) {
+                    Challenge reto = retoOpt.get();
+                    // Construimos la URL que apunta al frontend
+                    String urlReto = "http://localhost:5173/entrenar/" + reto.getId();
+
+                    String mensajeReto = "¡Hola @" + userName + "! Aquí tienes un reto para hoy:\n\n" +
+                            "🚀 *" + reto.getName() + "* (" + reto.getRank() + ")\n" +
+                            "📝 " + reto.getDescription() + "\n\n" +
+                            "💻 *Resuélvelo aquí:* " + urlReto;
+
+                    response.put("response_type", "ephemeral");
+                    response.put("text", mensajeReto);
+                } else {
+                    response.put("text", "No hay retos disponibles en este momento.");
+                }
                 break;
 
             case "/rank":

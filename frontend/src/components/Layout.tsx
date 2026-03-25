@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "react-oidc-context";
 import { Menu, Code, User, Trophy, LogOut, ShieldAlert } from "lucide-react";
+import { Toaster } from 'react-hot-toast';
 
 export default function Layout() {
   const [isOpen, setIsOpen] = useState(true);
@@ -88,7 +89,19 @@ export default function Layout() {
       <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
         <div style={{ height: "65px", backgroundColor: "white", borderBottom: "1px solid #e0e0e0", display: "flex", alignItems: "center", justifyContent: "flex-end", padding: "0 30px", boxShadow: "0 2px 4px rgba(0,0,0,0.02)" }}>
           <span style={{ color: "#555", fontWeight: "500" }}>
-            Hola, <span style={{ color: "#1e1e1e", fontWeight: "bold" }}>{auth.user?.profile.preferred_username}</span>
+            Hola,{" "} <Link 
+              to="/perfil" 
+              style={{ 
+                color: "#1e1e1e", 
+                fontWeight: "bold", 
+                textDecoration: "none",
+                cursor: "pointer" 
+              }}
+              onMouseOver={(e) => e.currentTarget.style.textDecoration = "underline"}
+              onMouseOut={(e) => e.currentTarget.style.textDecoration = "none"}
+            >
+              {auth.user?.profile.preferred_username}
+            </Link>
             {isAdmin && <span style={{ marginLeft: "10px", backgroundColor: "#ff9800", color: "white", padding: "2px 8px", borderRadius: "10px", fontSize: "0.8rem", fontWeight: "bold" }}>ADMIN</span>}
           </span>
         </div>
@@ -96,6 +109,7 @@ export default function Layout() {
           <Outlet /> 
         </div>
       </div>
+      <Toaster position="bottom-right" reverseOrder={false} />
     </div>
   );
 }

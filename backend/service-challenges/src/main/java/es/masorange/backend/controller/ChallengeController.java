@@ -47,7 +47,7 @@ public class ChallengeController {
     }
 
     @PostMapping("/generate/test/{id}")
-    public BasicResponseDTO generateTestForChallenge(@PathVariable String id) {
+    public BasicResponseDTO generateTestForChallenge(@PathVariable Long id) {
         return challengeService.generateTestsWithAI(id);
     }
 
@@ -57,19 +57,19 @@ public class ChallengeController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<Challenge> getChallenge(@PathVariable String id) {
+    public ResponseEntity<Challenge> getChallenge(@PathVariable Long id) {
         return challengeService.getChallenge(id)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
 
     @DeleteMapping("/{id}")
-    public BasicResponseDTO deleteChallenge(@PathVariable String id) {
+    public BasicResponseDTO deleteChallenge(@PathVariable Long id) {
         return challengeService.deleteChallenge(id);
     }
 
     @PatchMapping("/{id}")
-    public BasicResponseDTO updateChallenge(@PathVariable String id, @RequestBody Challenge dto) {
+    public BasicResponseDTO updateChallenge(@PathVariable Long id, @RequestBody Challenge dto) {
         return challengeService.updateChallenge(id, dto);
     }
 

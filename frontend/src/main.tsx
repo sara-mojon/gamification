@@ -8,8 +8,6 @@ const oidcConfig = {
   authority: "http://localhost:8180/realms/masorange-realm",
   client_id: "gamification-client",
   redirect_uri: "http://localhost:5173",
-  
-  // AÑADE ESTA LÍNEA AQUÍ:
   post_logout_redirect_uri: "http://localhost:5173",
   
   onSigninCallback: () => {

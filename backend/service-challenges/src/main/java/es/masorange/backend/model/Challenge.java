@@ -18,7 +18,11 @@ import lombok.*;
 public class Challenge {
 
     @Id
-    private String id;
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(name = "id_code_wars", unique = true)
+    private String idCodeWars;
 
     @Column(nullable = false)
     private String name;

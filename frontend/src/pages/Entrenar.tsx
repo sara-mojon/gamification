@@ -6,7 +6,7 @@ import { ChevronLeft, Play, CheckCircle } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 
 interface Reto {
-  id?: string;
+  id?: number;
   name: string;
   description: string;
   rank?: {
@@ -38,28 +38,45 @@ export default function Entrenar() {
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState("");
 
-  const [lenguaje, setLenguaje] = useState<"javascript" | "python" | "java" | "c">("javascript");
-  
+  const [lenguaje, setLenguaje] = useState<"javascript" | "python" | "java" | "c">("javascript");;
   const [codigo, setCodigo] = useState(plantillasCodigo.javascript);
 
   useEffect(() => {
-    const cargarReto = async () => {
+    const cargarDatos = async () => {
       if (!token) return;
 
       try {
-        const response = await fetch(`http://localhost:8081/api/challenges/${id}`, {
+        const reqReto = fetch(`http://localhost:8081/api/challenges/${id}`, {
           method: "GET",
-          headers: {
-            "Authorization": `Bearer ${token}`
-          }
+          headers: { "Authorization": `Bearer ${token}` }
         });
 
-        if (response.ok) {
-          const datos = await response.json();
-          setRetoActual(datos);
+        const reqPerfil = fetch(`http://localhost:8080/api/users/me`, {
+          method: "GET",
+          headers: { "Authorization": `Bearer ${token}` }
+        });
+
+        const [resReto, resPerfil] = await Promise.all([reqReto, reqPerfil]);
+
+        if (resReto.ok) {
+          const datosReto = await resReto.json();
+          setRetoActual(datosReto);
         } else {
           setError("No se pudo cargar el reto. Puede que no exista.");
         }
+
+        if (resPerfil.ok) {
+          const datosPerfil = await resPerfil.json();
+          if (datosPerfil.preferred_language) {
+            const langFav = datosPerfil.preferred_language.toLowerCase() as "javascript" | "python" | "java" | "c";
+            
+            if (langFav === "javascript" || langFav === "python" || langFav === "java" || langFav === "c") {
+              setLenguaje(langFav);
+              setCodigo(plantillasCodigo[langFav]);
+            }
+          }
+        }
+
       } catch {
         setError("Error de red intentando conectar con el servidor.");
       } finally {
@@ -67,7 +84,7 @@ export default function Entrenar() {
       }
     };
 
-    cargarReto();
+    cargarDatos();
   }, [id, token]);
 
   const cambiarLenguaje = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -119,7 +136,6 @@ export default function Entrenar() {
           Descripción del problema
         </h3>
         
-        {/* Contenedor para el Markdown */}
         <div style={{ color: "#555", lineHeight: "1.6", fontSize: "1.05rem", marginTop: "10px", overflowWrap: "break-word" }}>
           <ReactMarkdown>
             {retoActual.description || "Sin descripción"}

@@ -79,4 +79,16 @@ public class UserService {
         userRepository.deleteById(id);
         return new BasicResponseDTO("Usuario eliminado correctamente", "200");
     }
+
+    public BasicResponseDTO updateUser(Long id, UpdateUserDto dto) {
+        return userRepository.findById(id).map(existing -> {
+
+            Optional.ofNullable(dto.role()).ifPresent(existing::setRole);
+            Optional.ofNullable(dto.preferredLanguage()).ifPresent(existing::setPreferredLanguage);
+            userRepository.save(existing);
+            return new BasicResponseDTO("Usuario actualizado correctamente", "200");
+
+        }).orElseGet(() -> new BasicResponseDTO("No se encontró el usuario con id: " + id, "404"));
+
+    }
 }
