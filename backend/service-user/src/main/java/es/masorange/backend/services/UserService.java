@@ -58,7 +58,8 @@ public class UserService {
     }
 
     public List<User> getUsersList() {
-        return userRepository.findAllByRole("user");
+        return userRepository.findAll();
+        // return userRepository.findAllByRole("user");
     }
 
     public Optional<User> getUserById(Long id) {

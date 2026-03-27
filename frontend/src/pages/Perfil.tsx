@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "react-oidc-context";
 import { User, Code, Star, Calendar, Activity } from "lucide-react";
+import toast from 'react-hot-toast';
 
 const actividadReciente = [
   { id: 101, titulo: "Sumar dos números", fecha: "Hoy, 10:30", puntosGanados: 10, dificultad: "Fácil" },
@@ -56,8 +57,8 @@ export default function Perfil() {
             rangoGlobal: "-" 
           });
 
-          if (misDatos.preferred_language) {
-            setLenguajePreferido(misDatos.preferred_language);
+          if (misDatos.preferredLanguage) { 
+            setLenguajePreferido(misDatos.preferredLanguage);
           }
         } else {
           console.error("Error al cargar perfil:", response.status);
@@ -76,29 +77,29 @@ export default function Perfil() {
     const nuevoLenguaje = e.target.value;
     setLenguajePreferido(nuevoLenguaje);
 
-    if (!userId) {
-      console.error("No se puede guardar: Aún no tenemos el ID del usuario.");
-      return;
-    }
+    if (!userId) return;
 
-    try {
-      const response = await fetch(`http://localhost:8080/api/update/user/${userId}`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ 
-          preferredLanguage: nuevoLenguaje 
-        })
-      });
+    const peticion = fetch(`http://localhost:8080/api/update/user/${userId}`, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ preferredLanguage: nuevoLenguaje })
+    }).then(res => {
+      if (!res.ok) throw new Error("Error al guardar");
+      return res;
+    });
 
-      if (!response.ok) {
-        console.error("Error al actualizar el lenguaje en el backend.");
-      }
-    } catch (error) {
-      console.error("Error de red intentando guardar", error);
-    }
+    toast.promise(
+      peticion,
+      {
+        loading: 'Guardando preferencia...',
+        success: '¡Lenguaje preferido actualizado! ',
+        error: 'Error al actualizar el lenguaje ',
+      },
+      { style: { backgroundColor: '#1e1e1e', color: '#fff' } }
+    );
   };
 
   if (cargando) {
@@ -174,7 +175,7 @@ export default function Perfil() {
                 <option value="javascript">JavaScript</option>
                 <option value="python">Python</option>
                 <option value="java">Java</option>
-                <option value="c">C/C++</option>
+                <option value="c">C</option>
               </select>
             </div>
           </div>

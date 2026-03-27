@@ -4,7 +4,6 @@ import es.masorange.backend.model.User;
 import es.masorange.backend.model.BasicResponseDTO;
 import es.masorange.backend.model.UpdateUserDto;
 import es.masorange.backend.services.UserService;
-import okhttp3.Challenge;
 
 import java.util.List;
 

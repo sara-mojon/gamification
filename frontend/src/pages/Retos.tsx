@@ -46,6 +46,7 @@ export default function Retos() {
   const [dificultadFiltro, setDificultadFiltro] = useState("Todas");
   const [etiquetaFiltro, setEtiquetaFiltro] = useState("Todas");
   const [tiempoFiltro, setTiempoFiltro] = useState("Todos");
+  const [testFiltro, setTestFiltro] = useState("Todos");
   const [paginaActual, setPaginaActual] = useState(1);
 
   const [modalEliminar, setModalEliminar] = useState({ abierto: false, id: "", titulo: "" });
@@ -470,7 +471,13 @@ export default function Retos() {
     if (tiempoFiltro === "30") coincideTiempo = reto.tiempoEstimado <= 30;
     if (tiempoFiltro === "mas30") coincideTiempo = reto.tiempoEstimado > 30;
 
-    return coincideTexto && coincideDificultad && coincideEtiqueta && coincideTiempo;
+    let coincideTests = true;
+    if (isAdmin) {
+      if (testFiltro === "Con tests") coincideTests = reto.tieneTests;
+      if (testFiltro === "Sin tests") coincideTests = !reto.tieneTests;
+    }
+
+    return coincideTexto && coincideDificultad && coincideEtiqueta && coincideTiempo && coincideTests;
   });
 
   const totalPaginas = Math.ceil(retosFiltrados.length / ITEMS_POR_PAGINA) || 1;
@@ -870,6 +877,16 @@ export default function Retos() {
             <option value="mas30">Más de 30 min</option>
           </select>
         </div>
+        {/* FILTRO DE TESTS (Solo visible para Admins) */}
+        {isAdmin && (
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <select value={testFiltro} onChange={(e) => { setTestFiltro(e.target.value); setPaginaActual(1); }} style={{ padding: "12px", borderRadius: "6px", border: "1px solid #ddd", fontSize: "1rem", outline: "none", cursor: "pointer", boxSizing: "border-box" }}>
+              <option value="Todos">Estado de los tests</option>
+              <option value="Sin tests">Sin tests generados</option>
+              <option value="Con tests">Tests generados</option>
+            </select>
+          </div>
+        )}
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>

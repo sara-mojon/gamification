@@ -1,0 +1,31 @@
+/* Admin.css */
+
+/* Clase para el botón del select cuando NO es admin */
+.select-rol-user {
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid #ddd;
+  background-color: white;
+  color: #333;
+  font-weight: bold;
+  cursor: pointer;
+  outline: none;
+}
+
+/* Clase para el botón del select cuando SÍ es admin */
+.select-rol-admin {
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid #ff9800;
+  background-color: #fff3e0;
+  color: #e65100;
+  font-weight: bold;
+  cursor: pointer;
+  outline: none;
+}
+
+.select-rol-user option,
+.select-rol-admin option {
+  background-color: white;
+  color: #333;
+}
