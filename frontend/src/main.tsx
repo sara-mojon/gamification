@@ -12,6 +12,12 @@ const oidcConfig = {
   
   onSigninCallback: () => {
     window.history.replaceState({}, document.title, window.location.pathname);
+    const rutaDestino = sessionStorage.getItem('rutaDestino');
+
+    if (rutaDestino) {
+      sessionStorage.removeItem('rutaDestino');
+      window.location.href = rutaDestino;
+    }
   }
 };
 

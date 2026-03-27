@@ -44,7 +44,12 @@ function App() {
       <p style={{ marginBottom: "30px", color: "#666", fontSize: "1.2rem" }}>Demuestra tus habilidades de programación.</p>
       
       <button 
-        onClick={() => void auth.signinRedirect()}
+        onClick={() => {
+          // 1. Apuntamos la URL actual en el Session Storage
+          sessionStorage.setItem('rutaDestino', window.location.pathname);
+          // 2. Redirigimos al Login
+          void auth.signinRedirect();
+        }}
         style={{ 
           padding: "15px 30px", 
           fontSize: "1.2rem", 

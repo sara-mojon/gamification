@@ -9,9 +9,13 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.core.type.TypeReference;
+
 import es.masorange.backend.model.Challenge;
 import es.masorange.backend.repository.ChallengeRepository;
 import es.masorange.backend.services.ChallengeService;
@@ -33,28 +37,43 @@ public class SlackController {
     // 1. EVENTOS DE SLACK - Para el challenge y archivos
     // ==========================================================
     @PostMapping(value = "/events", consumes = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<Map<String, Object>> handleEvents(@RequestBody Map<String, Object> payload) {
-
-        // 1. EL CHALLENGE
-        if ("url_verification".equals(payload.get("type"))) {
-            Map<String, Object> response = new HashMap<>();
-            response.put("challenge", payload.get("challenge"));
-            return ResponseEntity.ok(response);
+    public ResponseEntity<?> handleEvents(
+            @RequestHeader(value = "X-Slack-Signature", required = false) String signature,
+            @RequestHeader(value = "X-Slack-Request-Timestamp", required = false) String timestamp,
+            @RequestBody String rawPayload // Lo recibimos como String puro para poder validarlo
+    ) {
+        // 1. ¡ESCUDO ACTIVADO! Validamos la firma
+        if (!slackService.isValidSlackRequest(signature, timestamp, rawPayload)) {
+            System.err.println("⚠️ ATENCIÓN: Se ha bloqueado una petición falsa que fingía ser de Slack.");
+            return ResponseEntity.status(401).body("Firma inválida");
         }
 
-        // 2. RECIBIR MENSAJES DIRECTOS
-        if ("event_callback".equals(payload.get("type"))) {
-            Map<String, Object> event = (Map<String, Object>) payload.get("event");
+        try {
+            // 2. Como es válido, convertimos el String raw a un Map para trabajar con él
+            ObjectMapper mapper = new ObjectMapper();
+            Map<String, Object> payload = mapper.readValue(rawPayload, new TypeReference<Map<String, Object>>() {
+            });
 
-            if (event != null && "message".equals(event.get("type")) && event.get("bot_id") == null) {
-                String idUsuario = (String) event.get("user");
-
-                // Usas tu método modificado para responderle por privado
-                slackService.enviarMensajeASlack(idUsuario, "¡Hola! Estoy listo para procesar tus katas.");
+            // 3. LA LÓGICA QUE YA TENÍAS
+            if ("url_verification".equals(payload.get("type"))) {
+                Map<String, Object> response = new HashMap<>();
+                response.put("challenge", payload.get("challenge"));
+                return ResponseEntity.ok(response);
             }
-        }
 
-        return ResponseEntity.ok().build();
+            if ("event_callback".equals(payload.get("type"))) {
+                Map<String, Object> event = (Map<String, Object>) payload.get("event");
+                if (event != null && "message".equals(event.get("type")) && event.get("bot_id") == null) {
+                    String idUsuario = (String) event.get("user");
+                    slackService.enviarMensajeASlack(idUsuario, "¡Hola! Estoy listo para procesar tus katas.");
+                }
+            }
+
+            return ResponseEntity.ok().build();
+
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().build();
+        }
     }
 
     // ==========================================================
