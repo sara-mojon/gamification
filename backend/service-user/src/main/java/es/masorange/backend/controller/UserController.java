@@ -11,16 +11,16 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 
 @RestController
-@RequestMapping("/api")
+@RequestMapping("/api/users")
 public class UserController {
 
     private final UserService userService;
@@ -29,25 +29,25 @@ public class UserController {
         this.userService = userService;
     }
 
-    @PostMapping("/users/sync")
+    @PostMapping("/sync")
     public ResponseEntity<User> syncUser(@AuthenticationPrincipal Jwt jwt) {
         User user = userService.syncUserWithKeycloak(jwt);
         return ResponseEntity.ok(user);
     }
 
-    @GetMapping("/users")
+    @GetMapping
     public List<User> getUsersList() {
         return userService.getUsersList();
     }
 
-    @GetMapping("/user/{id}")
+    @GetMapping("/{id}")
     public ResponseEntity<?> getUserById(@PathVariable Long id) {
         return userService.getUserById(id)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
 
-    @GetMapping("/users/me")
+    @GetMapping("/me")
     public ResponseEntity<User> getMyProfile(@AuthenticationPrincipal Jwt jwt) {
         String keycloakId = jwt.getSubject();
 
@@ -56,13 +56,25 @@ public class UserController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
-    @DeleteMapping("/delete/user/{id}")
+    @DeleteMapping("/{id}")
     public BasicResponseDTO deleteUser(@PathVariable Long id) {
         return userService.deleteUser(id);
     }
 
-    @PutMapping("/update/user/{id}")
+    @PatchMapping("/{id}")
     public BasicResponseDTO updateUser(@PathVariable Long id, @RequestBody UpdateUserDto dto) {
         return userService.updateUser(id, dto);
+    }
+
+    @GetMapping("/ranking/top3")
+    public ResponseEntity<List<User>> getTop3Ranking() {
+        return ResponseEntity.ok(userService.getTop3Ranking());
+    }
+
+    @GetMapping("/ranking/{username}")
+    public ResponseEntity<?> getUserRanking(@PathVariable String username) {
+        return userService.getUserRankingInfo(username)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
     }
 }

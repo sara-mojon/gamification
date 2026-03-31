@@ -59,10 +59,12 @@ public class UserService {
 
     public List<User> getUsersList() {
         return userRepository.findAll();
-        // return userRepository.findAllByRole("user");
     }
 
     public Optional<User> getUserById(Long id) {
+        if (id == null) {
+            return Optional.empty();
+        }
         return userRepository.findById(id);
     }
 
@@ -82,6 +84,9 @@ public class UserService {
     }
 
     public BasicResponseDTO updateUser(Long id, UpdateUserDto dto) {
+        if (id == null) {
+            return new BasicResponseDTO("El ID no puede ser nulo", "400");
+        }
         return userRepository.findById(id).map(existing -> {
 
             Optional.ofNullable(dto.role()).ifPresent(existing::setRole);
@@ -91,5 +96,27 @@ public class UserService {
 
         }).orElseGet(() -> new BasicResponseDTO("No se encontró el usuario con id: " + id, "404"));
 
+    }
+
+    public List<User> getTop3Ranking() {
+        return userRepository.findTop3ByOrderByScoreDesc();
+    }
+
+    public Optional<java.util.Map<String, Object>> getUserRankingInfo(String username) {
+        Optional<User> userOpt = userRepository.findByUsername(username);
+
+        if (userOpt.isEmpty()) {
+            return Optional.empty();
+        }
+
+        User user = userOpt.get();
+        int posicion = userRepository.countByScoreGreaterThan(user.getScore()) + 1;
+
+        java.util.Map<String, Object> response = new java.util.HashMap<>();
+        response.put("username", user.getUsername());
+        response.put("score", user.getScore());
+        response.put("position", posicion);
+
+        return Optional.of(response);
     }
 }

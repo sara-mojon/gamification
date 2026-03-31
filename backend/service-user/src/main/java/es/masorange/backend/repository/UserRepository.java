@@ -15,4 +15,8 @@ public interface UserRepository extends JpaRepository<User, Long> {
     List<User> findAllByRole(String role);
 
     Optional<User> findByKeycloakId(String keycloakId);
+
+    List<User> findTop3ByOrderByScoreDesc();
+
+    int countByScoreGreaterThan(Integer score);
 }
