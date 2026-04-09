@@ -1,0 +1,77 @@
+# k3s/home-server/service-gamification.yaml
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: service-gamification
+  namespace: sara
+spec:
+  type: ClusterIP
+  selector:
+    app: service-gamification
+  ports:
+    - port: 8082
+      targetPort: 8082
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: service-gamification
+  namespace: sara
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: service-gamification
+  template:
+    metadata:
+      labels:
+        app: service-gamification
+    spec:
+      hostAliases:
+        - ip: "100.114.58.117"
+          hostnames:
+            - "ai.sara.local"
+      initContainers:
+        - name: wait-for-postgres
+          image: busybox:1.36
+          command:
+            [
+              "sh",
+              "-c",
+              'until nc -z -v -w30 postgres-infra 5432; do echo "Waiting for DB..."; sleep 2; done;',
+            ]
+      containers:
+        - name: service-gamification
+          image: saramojon/service-gamification:v1
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8082
+          env:
+            - name: SPRING_DATASOURCE_URL
+              value: "jdbc:postgresql://postgres-infra:5432/gamification_db"
+            - name: SPRING_DATASOURCE_USERNAME
+              value: "postgres"
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: app-secret
+                  key: db-password
+            - name: SPRING_JPA_HIBERNATE_DDL_AUTO
+              value: "validate"
+            - name: OLLAMA_URL
+              value: "http://ai.sara.local:80"
+
+            # --- VARIABLES DE KEYCLOAK AÑADIDAS ---
+            - name: SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI
+              value: "https://auth.sara.local/realms/masorange-realm"
+            - name: SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI
+              value: "http://keycloak:8080/realms/masorange-realm/protocol/openid-connect/certs"
+
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "1Gi"
+              cpu: "1000m"

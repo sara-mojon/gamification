@@ -1,0 +1,14 @@
+# Usamos Java 17 versión ligera
+FROM eclipse-temurin:17-jre-alpine
+
+# Carpeta temporal
+VOLUME /tmp
+
+# Copiamos tu jar ya compilado desde la carpeta target
+COPY target/*.jar app.jar
+
+# Exponemos el puerto de este servicio
+EXPOSE 8080
+
+# Comando de arranque
+ENTRYPOINT ["java","-jar","/app.jar"]

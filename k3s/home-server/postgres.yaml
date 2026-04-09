@@ -1,0 +1,98 @@
+# k3s/home-server/postgres.yaml
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init-script
+  namespace: sara
+data:
+  init_dbs.sql: |
+    -- 1. Crear Bases de Datos (con IF NOT EXISTS no funciona directo, así que usamos bloques anónimos o simple SQL)
+    SELECT 'CREATE DATABASE keycloak' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'keycloak')\gexec
+    SELECT 'CREATE DATABASE judge0' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'judge0')\gexec
+    SELECT 'CREATE DATABASE gamification_db' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'gamification_db')\gexec
+
+    -- 2. Asegurar privilegios de OWNER (Muy importante para Flyway/Liquibase)
+    -- Si tus apps usan el usuario 'postgres', esto les da el control total:
+    ALTER DATABASE keycloak OWNER TO postgres;
+    ALTER DATABASE judge0 OWNER TO postgres;
+    ALTER DATABASE gamification_db OWNER TO postgres;
+
+    -- 3. Truco para el esquema 'public' (Postgres 15+)
+    -- Flyway necesita crear tablas en 'public'. Conectamos y damos permiso:
+    \c keycloak
+    GRANT ALL ON SCHEMA public TO postgres;
+    \c judge0
+    GRANT ALL ON SCHEMA public TO postgres;
+    \c gamification_db
+    GRANT ALL ON SCHEMA public TO postgres;
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-infra
+  namespace: sara
+spec:
+  type: ClusterIP
+  selector:
+    app: postgres-infra
+  ports:
+    - port: 5432
+      targetPort: 5432
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres-infra
+  namespace: sara
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres-infra
+  template:
+    metadata:
+      labels:
+        app: postgres-infra
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              value: "postgres"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: app-secret
+                  key: db-password
+            - name: POSTGRES_HOST_AUTH_METHOD
+              value: "scram-sha-256"
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "1Gi"
+              cpu: "1000m"
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "postgres"]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+          volumeMounts:
+            - name: postgres-storage
+              mountPath: /var/lib/postgresql/data
+            - name: init-script
+              mountPath: /docker-entrypoint-initdb.d
+      volumes:
+        - name: postgres-storage
+          hostPath:
+            path: /home/sara/k3s/postgres-data
+            type: DirectoryOrCreate
+        - name: init-script
+          configMap:
+            name: postgres-init-script

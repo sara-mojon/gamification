@@ -1,0 +1,128 @@
+# k3s/home-server/ingress-hs.yaml
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ingress-sara
+  namespace: sara
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+spec:
+  tls:
+    - hosts:
+        - auth.sara.local
+        - frontend.sara.local
+        - api.sara.local
+      secretName: sara-local-tls
+
+  rules:
+    # 1. Frontend de React (Publico y Local)
+    - host: app.saramg.org
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 80
+    - host: frontend.sara.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 80
+
+    # 2. API (Publico y Local)
+    - host: api.saramg.org
+      http:
+        paths:
+          # --- RUTAS DE SERVICE-USER ---
+          - path: /api/users
+            pathType: Prefix
+            backend:
+              service:
+                name: service-user
+                port:
+                  number: 8080
+
+          # --- RUTAS DE SERVICE-CHALLENGES ---
+          - path: /api/challenges
+            pathType: Prefix
+            backend:
+              service:
+                name: service-challenges
+                port:
+                  number: 8081
+
+          # --- RUTAS DE SERVICE-GAMIFICATION ---
+          - path: /api/gamification
+            pathType: Prefix
+            backend:
+              service:
+                name: service-gamification
+                port:
+                  number: 8082
+    - host: api.sara.local
+      http:
+        paths:
+          - path: /api/users
+            pathType: Prefix
+            backend:
+              service:
+                name: service-user
+                port:
+                  number: 8080
+          - path: /api/challenges
+            pathType: Prefix
+            backend:
+              service:
+                name: service-challenges
+                port:
+                  number: 8081
+          - path: /api/gamification
+            pathType: Prefix
+            backend:
+              service:
+                name: service-gamification
+                port:
+                  number: 8082
+
+    # 3. Keycloak (Auth) (Publico y Local)
+    - host: auth.saramg.org
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: keycloak
+                port:
+                  number: 8080
+    - host: auth.sara.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: keycloak
+                port:
+                  number: 8080
+
+    # 4. SLACK (Publico)
+    - host: slack.saramg.org
+      http:
+        paths:
+          - path: /api/slack
+            pathType: Prefix
+            backend:
+              service:
+                name: service-challenges
+                port:
+                  number: 8081

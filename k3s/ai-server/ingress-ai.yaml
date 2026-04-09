@@ -1,0 +1,22 @@
+# k3s/ai-server/ingress-ai.yaml
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ingress-ai-sara
+  namespace: sara
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: web
+spec:
+  rules:
+    # Mi propio dominio interno para hablar con la IA
+    - host: "ai-server.taild995dd.ts.net"
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: ollama-service
+                port:
+                  number: 11434

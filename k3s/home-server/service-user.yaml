@@ -1,0 +1,73 @@
+# k3s/home-server/service-user.yaml
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: service-user
+  namespace: sara
+spec:
+  type: ClusterIP
+  selector:
+    app: service-user
+  ports:
+    - port: 8080
+      targetPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: service-user
+  namespace: sara
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: service-user
+  template:
+    metadata:
+      labels:
+        app: service-user
+    spec:
+      initContainers:
+        - name: wait-for-postgres
+          image: busybox:1.36
+          command:
+            [
+              "sh",
+              "-c",
+              'until nc -z -v -w30 postgres-infra 5432; do echo "Waiting for DB..."; sleep 2; done;',
+            ]
+      hostAliases:
+        - ip: "100.103.55.77"
+          hostnames:
+            - "auth.sara.local"
+      containers:
+        - name: service-user
+          image: saramojon/service-user:v1
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+          env:
+            - name: SPRING_DATASOURCE_URL
+              value: "jdbc:postgresql://postgres-infra:5432/gamification_db"
+            - name: SPRING_DATASOURCE_USERNAME
+              value: "postgres"
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: app-secret
+                  key: db-password
+            - name: SPRING_JPA_HIBERNATE_DDL_AUTO
+              value: "validate"
+            # SEGURIDAD KEYCLOAK
+            - name: SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI
+              value: "https://auth.sara.local/realms/masorange-realm"
+            - name: SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI
+              value: "http://keycloak:8080/realms/masorange-realm/protocol/openid-connect/certs"
+          resources:
+            requests:
+              memory: "350Mi"
+              cpu: "150m"
+            limits:
+              memory: "1Gi"
+              cpu: "1000m"

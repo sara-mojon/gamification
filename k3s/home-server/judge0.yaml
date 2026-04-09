@@ -1,0 +1,177 @@
+# k3s/home-server/judge0.yaml
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: judge0-server
+  namespace: sara
+spec:
+  selector:
+    app: judge0-server
+  ports:
+    - protocol: TCP
+      port: 2358
+      targetPort: 2358
+  type: ClusterIP
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: judge0-env
+  namespace: sara
+data:
+  POSTGRES_HOST: "postgres-infra"
+  POSTGRES_PORT: "5432"
+  POSTGRES_DB: "judge0"
+  POSTGRES_USER: "postgres"
+  REDIS_HOST: "redis"
+  REDIS_PORT: "6379"
+  JUDGE0_TELEMETRY_ENABLE: "false"
+  JUDGE0_HOMEPAGE_ENABLE: "true"
+  JUDGE0_CONF_FILE: "/dev/null"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: judge0-server
+  namespace: sara
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: judge0-server
+  template:
+    metadata:
+      labels:
+        app: judge0-server
+    spec:
+      hostPID: true
+      initContainers:
+        - name: create-interceptor
+          image: judge0/judge0:1.13.1
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              cat << 'EOF' > /wrapper/isolate
+              #!/bin/bash
+              clean_args=()
+              for arg in "$@"; do
+                case $arg in
+                  --cg) ;;
+                  --cg-*) ;;
+                  *) clean_args+=("$arg") ;;
+                esac
+              done
+              exec /usr/local/bin/isolate "${clean_args[@]}"
+              EOF
+              chmod +x /wrapper/isolate
+          volumeMounts:
+            - name: wrapper-bin
+              mountPath: /wrapper
+      containers:
+        - name: judge0-server
+          image: judge0/judge0:1.13.1
+          ports:
+            - containerPort: 2358
+          command: ["/bin/sh", "-c"]
+          args: ["export PATH=/wrapper:$PATH && ./scripts/server"]
+          envFrom:
+            - configMapRef:
+                name: judge0-env
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: app-secret
+                  key: db-password
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: app-secret
+                  key: redis-password
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: wrapper-bin
+              mountPath: /wrapper
+            - name: isolate-data
+              mountPath: /var/local/lib/isolate
+      volumes:
+        - name: wrapper-bin
+          emptyDir: {}
+        - name: isolate-data
+          hostPath:
+            path: /k3s/judge0-data
+            type: DirectoryOrCreate
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: judge0-worker
+  namespace: sara
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: judge0-worker
+  template:
+    metadata:
+      labels:
+        app: judge0-worker
+    spec:
+      hostPID: true
+      initContainers:
+        - name: create-interceptor
+          image: judge0/judge0:1.13.1
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              cat << 'EOF' > /wrapper/isolate
+              #!/bin/bash
+              clean_args=()
+              for arg in "$@"; do
+                case $arg in
+                  --cg) ;; 
+                  --cg-*) ;;
+                  *) clean_args+=("$arg") ;;
+                esac
+              done
+              exec /usr/local/bin/isolate "${clean_args[@]}"
+              EOF
+              chmod +x /wrapper/isolate
+          volumeMounts:
+            - name: wrapper-bin
+              mountPath: /wrapper
+      containers:
+        - name: judge0-worker
+          image: judge0/judge0:1.13.1
+          command: ["/bin/sh", "-c"]
+          args: ["export PATH=/wrapper:$PATH && ./scripts/workers"]
+          envFrom:
+            - configMapRef:
+                name: judge0-env
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: app-secret
+                  key: db-password
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: app-secret
+                  key: redis-password
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: wrapper-bin
+              mountPath: /wrapper
+            - name: isolate-data
+              mountPath: /var/local/lib/isolate
+      volumes:
+        - name: wrapper-bin
+          emptyDir: {}
+        - name: isolate-data
+          hostPath:
+            path: /home/sara/k3s/judge0-data
+            type: DirectoryOrCreate

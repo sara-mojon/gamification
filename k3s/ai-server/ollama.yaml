@@ -1,0 +1,58 @@
+# k3s/ai-server/ollama.yaml
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ollama-service
+  namespace: sara
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ollama-service
+  template:
+    metadata:
+      labels:
+        app: ollama-service
+    spec:
+      containers:
+        - name: ollama
+          image: ollama/ollama:latest
+          ports:
+            - containerPort: 11434
+          env:
+            - name: OLLAMA_DEBUG
+              value: "1"
+            - name: NVIDIA_VISIBLE_DEVICES
+              value: "all"
+            - name: OLLAMA_HOST
+              value: "0.0.0.0"
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: ollama-storage
+              mountPath: /root/.ollama
+            - name: dri-devices
+              mountPath: /dev/dri
+      volumes:
+        - name: ollama-storage
+          hostPath:
+            path: /home/sara/k3s/ollama-data
+            type: DirectoryOrCreate
+        - name: dri-devices
+          hostPath:
+            path: /dev/dri
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ollama-service
+  namespace: sara
+spec:
+  selector:
+    app: ollama-service
+  ports:
+    - protocol: TCP
+      port: 11434
+      targetPort: 11434
+  type: ClusterIP

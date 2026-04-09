@@ -1,0 +1,292 @@
+# Taskfile.yaml
+
+version: "3"
+
+# Modo nativo de Windows
+dotenv: [".env.k3s"]
+
+vars:
+  HOME_IP: 100.103.55.77
+  AI_IP: 100.114.58.117
+  USER: sara
+  DOCKER_USER: "saramojon"
+  SSH_KEY: "C:/Users/saram/.ssh/home-server"
+  K3S_ROOT: "/home/sara/k3s"
+  TMP_DIR: "/home/sara/tmp/k3s_deploy"
+
+  SSH_HOME: "ssh -i {{.SSH_KEY}} {{.USER}}@{{.HOME_IP}}"
+  SSH_AI: "ssh -i {{.SSH_KEY}} {{.USER}}@{{.AI_IP}}"
+
+  # Helpers para Logs
+  LOG_INFO: 'powershell -Command "Write-Host \"INFO:\" -NoNewline -ForegroundColor Cyan; Write-Host \"'
+  LOG_SUCCESS: 'powershell -Command "Write-Host \"SUCCESS:\" -NoNewline -ForegroundColor Green; Write-Host \"'
+  LOG_WARN: 'powershell -Command "Write-Host \"WARN:\" -NoNewline -ForegroundColor Yellow; Write-Host \"'
+  END_LOG: '\""'
+
+tasks:
+  default:
+    cmds:
+      - task: status
+
+  # =================== #
+  # 1. STATUS & CONTROL #
+  # =================== #
+
+  status:
+    desc: "Muestra el estado completo del cluster (Apps + Monitoring + AI)"
+    silent: true
+    cmds:
+      - "{{.LOG_INFO}} --- HOME SERVER (Apps & Monitoring) --- {{.END_LOG}}"
+      - cmd: |
+          {{.SSH_HOME}} "echo '{{.HOME_LAB_SUDO_PASS}}' | sudo -S -p '' kubectl get pod,svc,ingress -n sara"
+
+      - "{{.LOG_INFO}} --- AI SERVER (Ollama) --- {{.END_LOG}}"
+      - cmd: |
+          {{.SSH_AI}} "echo '{{.HOME_LAB_SUDO_PASS}}' | sudo -S -p '' kubectl get pod,svc,ingress -n sara"
+
+  stop:
+    desc: "Pausa todos los servicios (Apps, AI y Monitoring)"
+    silent: true
+    cmds:
+      - "{{.LOG_WARN}} Pausing services... {{.END_LOG}}"
+      # 1. Home Apps
+      - cmd: |
+          {{.SSH_HOME}} "echo '{{.HOME_LAB_SUDO_PASS}}' | sudo -S -p '' kubectl scale deployment service-user service-challenges service-gamification frontend postgres-infra redis judge0-server judge0-worker keycloak --replicas=0 -n sara"
+      # 2. Monitoring Stack
+      - cmd: |
+          {{.SSH_HOME}} "echo '{{.HOME_LAB_SUDO_PASS}}' | sudo -S -p '' kubectl scale deployment/lgtm-sara-grafana statefulset/lgtm-sara-loki --replicas=0 -n sara"
+      # 3. AI Server
+      - cmd: |
+          {{.SSH_AI}} "echo '{{.HOME_LAB_SUDO_PASS}}' | sudo -S -p '' kubectl scale deployment ollama-service --replicas=0 -n sara"
+      - "{{.LOG_SUCCESS}} Services Paused. {{.END_LOG}}"
+
+  start:
+    desc: "Reactiva todos los servicios en orden correcto"
+    silent: true
+    cmds:
+      - "{{.LOG_INFO}} Waking up services... {{.END_LOG}}"
+      # 1. Bases de Datos y Logs
+      - cmd: |
+          {{.SSH_HOME}} "echo '{{.HOME_LAB_SUDO_PASS}}' | sudo -S -p '' kubectl scale deployment postgres-infra redis --replicas=1 -n sara"
+      - cmd: |
+          {{.SSH_HOME}} "echo '{{.HOME_LAB_SUDO_PASS}}' | sudo -S -p '' kubectl scale deployment/lgtm-sara-grafana statefulset/lgtm-sara-loki --replicas=1 -n sara"
+
+      - "{{.LOG_INFO}} Waiting 5s for DBs & Logs... {{.END_LOG}}"
+      - timeout /t 5 /nobreak > NUL
+
+      # 2. Apps de Negocio
+      - cmd: |
+          {{.SSH_HOME}} "echo '{{.HOME_LAB_SUDO_PASS}}' | sudo -S -p '' kubectl scale deployment service-user service-challenges service-gamification frontend judge0-server judge0-worker keycloak --replicas=1 -n sara"
+
+      # 3. AI Server
+      - cmd: |
+          {{.SSH_AI}} "echo '{{.HOME_LAB_SUDO_PASS}}' | sudo -S -p '' kubectl scale deployment ollama-service --replicas=1 -n sara"
+      - "{{.LOG_SUCCESS}} All Online. {{.END_LOG}}"
+
+  # =============== #
+  # 2. BUILD SYSTEM #
+  # =============== #
+
+  build:backend:
+    dir: backend
+    silent: true
+    cmds:
+      - "{{.LOG_INFO}} Building Backend... {{.END_LOG}}"
+      - cmd: "cmd /c mvnw.cmd clean install -DskipTests"
+      - for: ["service-user", "service-challenges", "service-gamification"]
+        cmd: |
+          cd {{.ITEM}}
+          docker build -f Dockerfile.k3s -t {{.DOCKER_USER}}/{{.ITEM}}:v1 .
+          docker push {{.DOCKER_USER}}/{{.ITEM}}:v1
+
+  build:frontend:
+    dir: frontend
+    silent: true
+    cmds:
+      - "{{.LOG_INFO}} Building Frontend... {{.END_LOG}}"
+      - |
+        docker build -f Dockerfile.k3s -t {{.DOCKER_USER}}/mi-frontend:v1 \
+        --build-arg VITE_USER_URL={{.VITE_USER_URL}} \
+        --build-arg VITE_KEYCLOAK_URL={{.VITE_KEYCLOAK_URL}} \
+        --build-arg VITE_CHALLENGES_URL={{.VITE_CHALLENGES_URL}} .
+      - docker push {{.DOCKER_USER}}/mi-frontend:v1
+
+  # ==================== #
+  # 3. DEPLOYMENT & SYNC #
+  # ==================== #
+
+  sync:home:
+    internal: true
+    silent: true
+    cmds:
+      - "{{.LOG_INFO}} Syncing to Home Server... {{.END_LOG}}"
+      - cmd: |
+          {{.SSH_HOME}} "echo '{{.HOME_LAB_SUDO_PASS}}' | sudo -S -p '' bash -c 'rm -rf {{.TMP_DIR}} && mkdir -p {{.TMP_DIR}} && chown {{.USER}}:{{.USER}} {{.TMP_DIR}}'"
+      - scp -i {{.SSH_KEY}} k3s/home-server/*.yaml {{.USER}}@{{.HOME_IP}}:{{.TMP_DIR}}/
+      - cmd: |
+          {{.SSH_HOME}} "echo '{{.HOME_LAB_SUDO_PASS}}' | sudo -S -p '' bash -c 'mkdir -p {{.K3S_ROOT}} && cp {{.TMP_DIR}}/*.yaml {{.K3S_ROOT}}/ && rm -rf {{.TMP_DIR}}'"
+
+  sync:ai:
+    internal: true
+    silent: true
+    cmds:
+      - "{{.LOG_INFO}} Syncing to AI Server... {{.END_LOG}}"
+      - cmd: |
+          {{.SSH_AI}} "echo '{{.HOME_LAB_SUDO_PASS}}' | sudo -S -p '' bash -c 'rm -rf {{.TMP_DIR}} && mkdir -p {{.TMP_DIR}} && chown {{.USER}}:{{.USER}} {{.TMP_DIR}}'"
+      - scp -i {{.SSH_KEY}} k3s/ai-server/*.yaml {{.USER}}@{{.AI_IP}}:{{.TMP_DIR}}/
+      - cmd: |
+          {{.SSH_AI}} "echo '{{.HOME_LAB_SUDO_PASS}}' | sudo -S -p '' bash -c 'mkdir -p {{.K3S_ROOT}} && cp {{.TMP_DIR}}/*.yaml {{.K3S_ROOT}}/ && rm -rf {{.TMP_DIR}}'"
+
+  # ================= #
+  # --- ORCHESTRATION #
+  # ================= #
+
+  deploy:monitoring:
+    desc: "Despliega el stack LGTM (Loki, Grafana, Promtail) con Helm"
+    silent: true
+    cmds:
+      - "{{.LOG_INFO}} Deploying Monitoring Stack (LGTM)... {{.END_LOG}}"
+      - cmd: |
+          {{.SSH_HOME}} "echo '{{.HOME_LAB_SUDO_PASS}}' | sudo -S -p '' bash -c 'mkdir -p {{.TMP_DIR}} && chown {{.USER}}:{{.USER}} {{.TMP_DIR}}'"
+      - scp -i {{.SSH_KEY}} k3s/home-server/lgtm.yaml {{.USER}}@{{.HOME_IP}}:{{.TMP_DIR}}/lgtm.yaml
+      - cmd: |
+          {{.SSH_HOME}} "echo '{{.HOME_LAB_SUDO_PASS}}' | sudo -S -p '' bash -c 'export KUBECONFIG=/etc/rancher/k3s/k3s.yaml && mv {{.TMP_DIR}}/lgtm.yaml {{.K3S_ROOT}}/lgtm.yaml && kubectl create namespace sara --dry-run=client -o yaml | kubectl apply -f - && helm repo add grafana https://grafana.github.io/helm-charts && helm repo update && helm upgrade --install lgtm-sara grafana/loki-stack --namespace sara --values {{.K3S_ROOT}}/lgtm.yaml'"
+      - "{{.LOG_SUCCESS}} Monitoring deployed via Helm. {{.END_LOG}}"
+
+  deploy:infra:
+    silent: true
+    cmds:
+      - task: sync:home
+      - "{{.LOG_INFO}} Deploying Infrastructure... {{.END_LOG}}"
+      - cmd: |
+          {{.SSH_HOME}} "echo '{{.HOME_LAB_SUDO_PASS}}' | sudo -S -p '' bash -c 'mkdir -p {{.K3S_ROOT}}/redis-data {{.K3S_ROOT}}/judge0-data && if [ ! -d {{.K3S_ROOT}}/postgres-data ]; then mkdir -p {{.K3S_ROOT}}/postgres-data && chmod 777 {{.K3S_ROOT}}/postgres-data; fi && kubectl create namespace sara --dry-run=client -o yaml | kubectl apply -f - && kubectl apply -f {{.K3S_ROOT}}/k3s-secrets.yaml -f {{.K3S_ROOT}}/postgres.yaml -f {{.K3S_ROOT}}/redis.yaml -f {{.K3S_ROOT}}/judge0.yaml -f {{.K3S_ROOT}}/keycloak.yaml -f {{.K3S_ROOT}}/ingress-hs.yaml'"
+      - "{{.LOG_INFO}} Waiting for Postgres... {{.END_LOG}}"
+      - cmd: |
+          {{.SSH_HOME}} "echo '{{.HOME_LAB_SUDO_PASS}}' | sudo -S -p '' kubectl wait --for=condition=ready pod -l app=postgres-infra -n sara --timeout=60s"
+
+  deploy:backend:
+    silent: true
+    cmds:
+      - task: build:backend
+      - task: sync:home
+      - "{{.LOG_INFO}} Deploying service-user (Flyway)... {{.END_LOG}}"
+      - cmd: |
+          {{.SSH_HOME}} "echo '{{.HOME_LAB_SUDO_PASS}}' | sudo -S -p '' kubectl apply -f {{.K3S_ROOT}}/service-user.yaml"
+      - cmd: |
+          {{.SSH_HOME}} "echo '{{.HOME_LAB_SUDO_PASS}}' | sudo -S -p '' kubectl rollout restart deployment service-user -n sara"
+
+      # Esperamos a que termine Flyway y arranque Spring Boot
+      - "{{.LOG_INFO}} Waiting for service-user to be ready... {{.END_LOG}}"
+      - cmd: |
+          {{.SSH_HOME}} "echo '{{.HOME_LAB_SUDO_PASS}}' | sudo -S -p '' kubectl rollout status deployment/service-user -n sara --timeout=120s"
+
+      - "{{.LOG_INFO}} Deploying challenges and gamification... {{.END_LOG}}"
+      - cmd: |
+          {{.SSH_HOME}} "echo '{{.HOME_LAB_SUDO_PASS}}' | sudo -S -p '' kubectl apply -f {{.K3S_ROOT}}/service-challenges.yaml -f {{.K3S_ROOT}}/service-gamification.yaml"
+      - cmd: |
+          {{.SSH_HOME}} "echo '{{.HOME_LAB_SUDO_PASS}}' | sudo -S -p '' kubectl rollout restart deployment service-challenges service-gamification -n sara"
+
+  deploy:frontend:
+    silent: true
+    cmds:
+      - task: build:frontend
+      - task: sync:home
+      - "{{.LOG_INFO}} Deploying Frontend... {{.END_LOG}}"
+      - cmd: |
+          {{.SSH_HOME}} "echo '{{.HOME_LAB_SUDO_PASS}}' | sudo -S -p '' kubectl apply -f {{.K3S_ROOT}}/frontend.yaml"
+      - cmd: |
+          {{.SSH_HOME}} "echo '{{.HOME_LAB_SUDO_PASS}}' | sudo -S -p '' kubectl rollout restart deployment frontend -n sara"
+
+  deploy:ai:
+    silent: true
+    cmds:
+      - task: sync:ai
+      - "{{.LOG_INFO}} Deploying Ollama... {{.END_LOG}}"
+      - cmd: |
+          {{.SSH_AI}} "echo '{{.HOME_LAB_SUDO_PASS}}' | sudo -S -p '' bash -c 'mkdir -p {{.K3S_ROOT}}/ollama-data && chmod 777 {{.K3S_ROOT}}/ollama-data && kubectl create namespace sara --dry-run=client -o yaml | kubectl apply -f - && kubectl apply -f {{.K3S_ROOT}}/ollama.yaml && kubectl apply -f {{.K3S_ROOT}}/ingress-ai.yaml && kubectl rollout restart deployment ollama-service -n sara'"
+
+  deploy:all:
+    desc: "Despliegue (Infra + Monitoring + Apps + AI)"
+    silent: true
+    cmds:
+      - "{{.LOG_INFO}} --- STEP 1: SYNC & INFRA --- {{.END_LOG}}"
+      - task: deploy:infra
+      - "{{.LOG_INFO}} --- STEP 2: MONITORING STACK --- {{.END_LOG}}"
+      - task: deploy:monitoring
+      - "{{.LOG_INFO}} --- STEP 3: BUILD & DEPLOY BACKEND --- {{.END_LOG}}"
+      - task: deploy:backend
+      - "{{.LOG_INFO}} --- STEP 4: BUILD & DEPLOY FRONTEND --- {{.END_LOG}}"
+      - task: deploy:frontend
+      - "{{.LOG_INFO}} --- STEP 5: DEPLOY AI --- {{.END_LOG}}"
+      - task: deploy:ai
+      - "{{.LOG_SUCCESS}} ✅ SYSTEM DEPLOYED SUCCESSFULLY {{.END_LOG}}"
+
+  # ======= #
+  # CLEANUP #
+  # ======= #
+
+  _clean:k8s:
+    silent: true
+    cmds:
+      - "{{.LOG_WARN}} Cleaning Apps (K8s Resources)... {{.END_LOG}}"
+      - cmd: |
+          {{.SSH_HOME}} "echo '{{.HOME_LAB_SUDO_PASS}}' | sudo -S -p '' bash -c 'kubectl delete pods --all -n sara --force --grace-period=0 --ignore-not-found; kubectl delete ns sara --ignore-not-found --wait=false'"
+      - cmd: |
+          {{.SSH_AI}} "echo '{{.HOME_LAB_SUDO_PASS}}' | sudo -S -p '' bash -c 'kubectl delete pods --all -n sara --force --grace-period=0 --ignore-not-found; kubectl delete ns sara --ignore-not-found --wait=false'"
+
+  _clean:monitoring:
+    silent: true
+    cmds:
+      - "{{.LOG_WARN}} Cleaning Monitoring Stack (Helm + K8s)... {{.END_LOG}}"
+      - cmd: |
+          {{.SSH_HOME}} "echo '{{.HOME_LAB_SUDO_PASS}}' | sudo -S -p '' bash -c 'export KUBECONFIG=/etc/rancher/k3s/k3s.yaml && helm uninstall lgtm-sara -n sara || true'"
+      - "{{.LOG_SUCCESS}} Monitoring Removed. {{.END_LOG}}"
+
+  _clean:postgres:
+    silent: true
+    cmds:
+      - cmd: |
+          {{.SSH_HOME}} "echo '{{.HOME_LAB_SUDO_PASS}}' | sudo -S -p '' rm -rf {{.K3S_ROOT}}/postgres-data"
+      - "{{.LOG_SUCCESS}} Postgres deleted. {{.END_LOG}}"
+
+  _clean:redis:
+    silent: true
+    cmds:
+      - cmd: |
+          {{.SSH_HOME}} "echo '{{.HOME_LAB_SUDO_PASS}}' | sudo -S -p '' rm -rf {{.K3S_ROOT}}/redis-data"
+      - "{{.LOG_SUCCESS}} Redis deleted. {{.END_LOG}}"
+
+  _clean:judge0:
+    silent: true
+    cmds:
+      - cmd: |
+          {{.SSH_HOME}} "echo '{{.HOME_LAB_SUDO_PASS}}' | sudo -S -p '' rm -rf {{.K3S_ROOT}}/judge0-data"
+      - "{{.LOG_SUCCESS}} Judge0 data deleted. {{.END_LOG}}"
+
+  _clean:ollama:
+    silent: true
+    cmds:
+      - cmd: |
+          {{.SSH_AI}} "echo '{{.HOME_LAB_SUDO_PASS}}' | sudo -S -p '' rm -rf {{.K3S_ROOT}}/ollama-data"
+      - "{{.LOG_SUCCESS}} Ollama models deleted. {{.END_LOG}}"
+
+  clean:
+    desc: "🧙 Asistente de Limpieza"
+    silent: true
+    cmds:
+      - |
+        powershell -Command "
+        Write-Host '--- CLUSTER CLEANUP ---' -ForegroundColor Magenta
+        task _clean:k8s
+
+        Write-Host '--- MONITORING DELETION ---' -ForegroundColor Yellow
+        if ((Read-Host '[OPCIONAL] Delete GRAFANA/LOKI? (y/n)') -eq 'y') { task _clean:monitoring }
+
+        Write-Host '--- DATA DELETION ---' -ForegroundColor Yellow
+        if ((Read-Host '[1/4] Delete POSTGRES DB? (y/n)') -eq 'y') { task _clean:postgres }
+        if ((Read-Host '[2/4] Delete REDIS? (y/n)') -eq 'y') { task _clean:redis }
+        if ((Read-Host '[3/4] Delete JUDGE0? (y/n)') -eq 'y') { task _clean:judge0 }
+        if ((Read-Host '[4/4] Delete OLLAMA? (y/n)') -eq 'y') { task _clean:ollama }
+
+        Write-Host 'DONE.' -ForegroundColor Green
+        "
