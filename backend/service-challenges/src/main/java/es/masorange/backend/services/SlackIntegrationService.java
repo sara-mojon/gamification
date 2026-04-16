@@ -19,7 +19,6 @@ import es.masorange.backend.repository.ChallengeRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 
 @Service
@@ -78,7 +77,8 @@ public class SlackIntegrationService {
     }
 
     // @Scheduled(cron = "0 0 10 */2 * *")
-    @Scheduled(cron = "0 */5 * * * *")
+    // @Scheduled(cron = "0 */5 * * * *")
+    @Scheduled(cron = "0 0 10 * * *")
     public void dispararRetoCada48h() {
         Optional<Challenge> retoOpt = challengeRepository.findRandomChallenge();
 

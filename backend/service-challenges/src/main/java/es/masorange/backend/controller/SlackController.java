@@ -92,7 +92,7 @@ public class SlackController {
         Map<String, Object> response = new HashMap<>();
 
         switch (command) {
-            case "/reto":
+            case "/challenge":
                 Optional<Challenge> retoOpt = challengeRepository.findRandomChallenge();
 
                 if (retoOpt.isPresent()) {
@@ -130,7 +130,7 @@ public class SlackController {
                 response.put("text", mensajeRank);
                 break;
 
-            case "/duelo":
+            case "/duel":
                 String oponenteRaw = text.trim();
 
                 // 1. Validamos que haya escrito la @ (ya sea en formato literal o ID)
@@ -185,6 +185,15 @@ public class SlackController {
             case "/hint":
                 response.put("response_type", "ephemeral");
                 response.put("text", "🤖 Conectando con la IA para tu pista...");
+                break;
+
+            case "info":
+                response.put("response_type", "ephemeral");
+                response.put("text", "ℹ️ *Comandos disponibles:*\n" +
+                        "• `/challenge` - Recibe un reto aleatorio para resolver.\n" +
+                        "• `/rank` - Consulta tu posición y estadísticas en Codewars.\n" +
+                        "• `/duel @usuario` - Desafía a otro desarrollador a un duelo de código.\n" +
+                        "• `/hint` - Obtén una pista para el reto que estás intentando resolver.");
                 break;
 
             default:
