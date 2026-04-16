@@ -3,7 +3,6 @@ package es.masorange.backend.controller;
 import java.util.List;
 
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -22,7 +21,6 @@ import org.springframework.web.bind.annotation.RequestParam;
 
 @RestController
 @RequestMapping("/api/challenges")
-@CrossOrigin(origins = "http://localhost:5173")
 public class ChallengeController {
 
     private final ChallengeService challengeService;
@@ -51,7 +49,7 @@ public class ChallengeController {
         return challengeService.generateTestsWithAI(id);
     }
 
-    @GetMapping("/")
+    @GetMapping
     public List<Challenge> getAllChallenges() {
         return challengeService.getAllChallenges();
     }

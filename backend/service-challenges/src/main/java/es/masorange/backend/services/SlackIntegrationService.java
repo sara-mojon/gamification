@@ -33,6 +33,9 @@ public class SlackIntegrationService {
     @Value("${slack.signing.secret}")
     private String slackSigningSecret;
 
+    @Value("${frontend.url:http://localhost:5173}")
+    private String frontendUrl;
+
     private final ChallengeRepository challengeRepository;
 
     public SlackIntegrationService(ChallengeRepository challengeRepository) {
@@ -76,16 +79,15 @@ public class SlackIntegrationService {
         }
     }
 
-    // @Scheduled(cron = "0 0 10 */2 * *")
     // @Scheduled(cron = "0 */5 * * * *")
-    @Scheduled(cron = "0 0 10 * * *")
+    @Scheduled(cron = "0 0 10 */1 * *")
     public void dispararRetoCada48h() {
         Optional<Challenge> retoOpt = challengeRepository.findRandomChallenge();
 
         if (retoOpt.isPresent()) {
             Challenge reto = retoOpt.get();
             // Construimos la URL que apunta al frontend
-            String urlReto = "http://localhost:5173/entrenar/" + reto.getId();
+            String urlReto = frontendUrl + "/entrenar/" + reto.getId();
 
             String descripcionLimpia = limpiarDescripcionParaSlack(reto.getDescription());
 

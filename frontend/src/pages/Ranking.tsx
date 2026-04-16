@@ -1,3 +1,5 @@
+// frontend/src/pages/Ranking.tsx
+
 import { useState, useEffect } from "react";
 import { Trophy, Search, ChevronLeft, ChevronRight, Medal, ArrowUpDown } from "lucide-react";
 import { useAuth } from "react-oidc-context"; 
@@ -31,12 +33,15 @@ export default function Ranking() {
   const [criterioOrden, setCriterioOrden] = useState("puntos"); 
   const [paginaActual, setPaginaActual] = useState(1);
 
+  // --- VARIABLE DE ENTORNO DINÁMICA ---
+  const baseUrl = import.meta.env.VITE_USER_URL || 'http://localhost:8080';
+
   useEffect(() => {
     const cargarUsuarios = async () => {
       if (!token) return;
 
       try {
-        const response = await fetch('http://localhost:8080/api/users', {
+        const response = await fetch(`${baseUrl}/api/users`, {
           headers: {
             'Authorization': `Bearer ${token}`
           }
@@ -64,7 +69,7 @@ export default function Ranking() {
     };
 
     cargarUsuarios();
-  }, [token]);
+  }, [token, baseUrl]);
   
   const usuariosOrdenados = [...usuarios]
     .sort((a, b) => {

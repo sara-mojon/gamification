@@ -1,3 +1,5 @@
+// frontend/src/pages/Entrenar.tsx
+
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "react-oidc-context";
@@ -41,17 +43,20 @@ export default function Entrenar() {
   const [lenguaje, setLenguaje] = useState<"javascript" | "python" | "java" | "c">("javascript");;
   const [codigo, setCodigo] = useState(plantillasCodigo.javascript);
 
+  const baseUrlUsers = import.meta.env.VITE_USER_URL || 'http://localhost:8080';
+  const baseUrlChallenges = import.meta.env.VITE_CHALLENGES_URL || import.meta.env.VITE_USER_URL || 'http://localhost:8081';
+
   useEffect(() => {
     const cargarDatos = async () => {
       if (!token) return;
 
       try {
-        const reqReto = fetch(`http://localhost:8081/api/challenges/${id}`, {
+        const reqReto = fetch(`${baseUrlChallenges}/api/challenges/${id}`, {
           method: "GET",
           headers: { "Authorization": `Bearer ${token}` }
         });
 
-        const reqPerfil = fetch(`http://localhost:8080/api/users/me`, {
+        const reqPerfil = fetch(`${baseUrlUsers}/api/users/me`, {
           method: "GET",
           headers: { "Authorization": `Bearer ${token}` }
         });
@@ -85,7 +90,7 @@ export default function Entrenar() {
     };
 
     cargarDatos();
-  }, [id, token]);
+  }, [id, token, baseUrlUsers, baseUrlChallenges]);
 
   const cambiarLenguaje = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const nuevoLenguaje = e.target.value as "javascript" | "python" | "java" | "c";
@@ -114,35 +119,49 @@ export default function Entrenar() {
   }
 
   return (
-    <div style={{ display: "flex", height: "calc(100vh - 65px)", margin: "-40px" }}>
+    <div style={{ 
+      display: "grid", 
+      gridTemplateColumns: "0.75fr 1fr", 
+      height: "calc(100vh - 65px)", 
+      margin: "-40px", 
+      overflow: "hidden" 
+    }}>
       
-      <div style={{ flex: 1, padding: "40px", backgroundColor: "#f9f9f9", borderRight: "1px solid #ddd", overflowY: "auto", display: "flex", flexDirection: "column" }}>
+      {/* PANEL IZQUIERDO (Descripción) */}
+      <div style={{ 
+        padding: "40px", 
+        backgroundColor: "#f9f9f9", 
+        borderRight: "1px solid #ddd", 
+        overflowY: "auto",
+        display: "flex", 
+        flexDirection: "column" 
+      }}>
         <button 
           onClick={() => navigate("/retos")}
-          style={{ display: "flex", alignItems: "center", background: "none", border: "none", color: "#666", cursor: "pointer", marginBottom: "20px", padding: 0, fontWeight: "bold" }}
+          style={{ display: "flex", alignItems: "center", background: "none", border: "none", color: "#666", cursor: "pointer", marginBottom: "20px", padding: 0, fontWeight: "bold", flexShrink: 0 }}
         >
           <ChevronLeft size={20} /> Volver a los retos
         </button>
 
-        <div style={{ display: "flex", alignItems: "center", marginBottom: "20px" }}>
+        <div style={{ display: "flex", alignItems: "center", marginBottom: "20px", flexShrink: 0 }}>
           <h1 style={{ margin: 0, fontSize: "2rem", color: "#1e1e1e", marginRight: "15px" }}>{retoActual.name || "Reto sin título"}</h1>
           <span style={{ backgroundColor: "#4caf50", color: "white", padding: "4px 10px", borderRadius: "20px", fontSize: "0.8rem", fontWeight: "bold" }}>
             {retoActual.rank?.name || "Normal"}
           </span>
         </div>
 
-        <h3 style={{ borderBottom: "2px solid #ddd", paddingBottom: "10px", color: "#333", display: "flex", alignItems: "center" }}>
+        <h3 style={{ borderBottom: "2px solid #ddd", paddingBottom: "10px", color: "#333", display: "flex", alignItems: "center", flexShrink: 0 }}>
           <CheckCircle size={18} style={{ marginRight: "10px", color: "#888" }} />
           Descripción del problema
         </h3>
         
-        <div style={{ color: "#555", lineHeight: "1.6", fontSize: "1.05rem", marginTop: "10px", overflowWrap: "break-word" }}>
+        <div style={{ color: "#555", lineHeight: "1.6", fontSize: "1.05rem", marginTop: "10px", overflowWrap: "break-word", flexGrow: 1 }}>
           <ReactMarkdown>
             {retoActual.description || "Sin descripción"}
           </ReactMarkdown>
         </div>
 
-        <div style={{ marginTop: "auto", paddingTop: "30px" }}>
+        <div style={{ marginTop: "30px", flexShrink: 0 }}>
             <div style={{ backgroundColor: "#1e1e1e", color: "#fff", borderRadius: "8px", padding: "20px", minHeight: "150px" }}>
             <h4 style={{ margin: "0 0 10px 0", color: "#aaa", fontSize: "0.9rem", textTransform: "uppercase" }}>Resultado de las pruebas</h4>
             <p style={{ color: "#aaa", fontFamily: "monospace" }}>Aún no has ejecutado tu código...</p>
@@ -150,10 +169,15 @@ export default function Entrenar() {
         </div>
       </div>
 
-      <div style={{ flex: "1.5", display: "flex", flexDirection: "column", backgroundColor: "#1e1e1e" }}>
+      {/* PANEL DERECHO (Editor) */}
+      <div style={{ 
+        display: "flex", 
+        flexDirection: "column", 
+        backgroundColor: "#1e1e1e", 
+        overflow: "hidden"
+      }}>
         
-        <div style={{ height: "50px", backgroundColor: "#2d2d2d", borderBottom: "1px solid #111", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 20px" }}>
-          
+        <div style={{ height: "50px", backgroundColor: "#2d2d2d", borderBottom: "1px solid #111", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 20px", flexShrink: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: "15px" }}>
             <span style={{ color: "#aaa", fontSize: "0.9rem", fontWeight: "bold" }}>LENGUAJE:</span>
             <select 
@@ -170,28 +194,31 @@ export default function Entrenar() {
               <option value="c">C</option>
             </select>
           </div>
-
           <span style={{ color: "#888", fontFamily: "monospace", fontSize: "0.9rem" }}>
             {nombresArchivo[lenguaje]}
           </span>
         </div>
 
-        <div style={{ flex: 1, paddingTop: "10px" }}>
-          <Editor
-            height="100%"
-            language={lenguaje}
-            theme="vs-dark"
-            value={codigo}
-            onChange={(valor) => setCodigo(valor || "")}
-            options={{
-              minimap: { enabled: false }, 
-              fontSize: 16,
-              padding: { top: 15 }
-            }}
-          />
+        {/* 2. BLINDAJE DEL EDITOR */}
+        <div style={{ flex: 1, position: "relative" }}> 
+          <div style={{ position: "absolute", top: 0, bottom: 0, left: 0, right: 0, paddingTop: "10px" }}>
+            <Editor
+              height="100%"
+              language={lenguaje}
+              theme="vs-dark"
+              value={codigo}
+              onChange={(valor) => setCodigo(valor || "")}
+              options={{
+                minimap: { enabled: false }, 
+                fontSize: 16,
+                padding: { top: 15 }
+              }}
+            />
+          </div>
         </div>
 
-        <div style={{ height: "70px", backgroundColor: "#2d2d2d", borderTop: "1px solid #111", display: "flex", alignItems: "center", justifyContent: "flex-end", padding: "0 20px" }}>
+        {/* Botón de Ejecutar */}
+        <div style={{ height: "70px", backgroundColor: "#2d2d2d", borderTop: "1px solid #111", display: "flex", alignItems: "center", justifyContent: "flex-end", padding: "0 20px", flexShrink: 0 }}>
           <button 
             onClick={ejecutarCodigo}
             style={{ 

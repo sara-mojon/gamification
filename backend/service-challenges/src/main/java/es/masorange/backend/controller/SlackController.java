@@ -1,10 +1,11 @@
 package es.masorange.backend.controller;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -13,12 +14,13 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.client.RestTemplate;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.core.type.TypeReference;
 
 import es.masorange.backend.model.Challenge;
 import es.masorange.backend.repository.ChallengeRepository;
-import es.masorange.backend.services.ChallengeService;
 import es.masorange.backend.services.SlackIntegrationService;
 
 @RestController
@@ -27,6 +29,9 @@ public class SlackController {
 
     private final SlackIntegrationService slackService;
     private final ChallengeRepository challengeRepository;
+
+    @Value("${frontend.url:http://localhost:5173}")
+    private String frontendUrl;
 
     public SlackController(SlackIntegrationService slackService, ChallengeRepository challengeRepository) {
         this.slackService = slackService;
@@ -87,7 +92,7 @@ public class SlackController {
             @RequestParam(value = "text", defaultValue = "") String text) {
 
         System.out
-                .println("Comando recibido: " + command + " ejecutado por @" + userName + " con texto: '" + text + "'");
+                .println("Comando recibido: " + command + " ejecutado por @" + userName);
 
         Map<String, Object> response = new HashMap<>();
 
@@ -97,8 +102,7 @@ public class SlackController {
 
                 if (retoOpt.isPresent()) {
                     Challenge reto = retoOpt.get();
-                    // Construimos la URL que apunta al frontend
-                    String urlReto = "http://localhost:5173/entrenar/" + reto.getId();
+                    String urlReto = frontendUrl + "/entrenar/" + reto.getId();
 
                     String mensajeReto = "¡Hola @" + userName + "! Aquí tienes un reto para hoy:\n\n" +
                             "🚀 *" + reto.getName() + "* (" + reto.getRank() + ")\n" +
@@ -113,21 +117,66 @@ public class SlackController {
                 break;
 
             case "/rank":
-                // 1. MOCKEAMOS LOS DATOS: Aquí en el futuro harás:
-                // Usuario user = usuarioRepository.findByUsername(userName);
-                // Y calcularás su posición consultando a la BBDD.
-                int posicionMock = 7;
-                int puntosMock = 1250;
-                int retosMock = 42;
+                String USER_SERVICE_URL = "http://service-user:8080/api/users/ranking";
 
-                String mensajeRank = "🏆 *Tu perfil de Codewars* 🏆\n" +
-                        "👤 *Jugador:* @" + userName + "\n" +
-                        "🏅 *Clasificación Global:* #" + posicionMock + "\n" +
-                        "⭐ *Puntos de honor:* " + puntosMock + " px\n" +
-                        "💻 *Katas resueltas:* " + retosMock;
+                RestTemplate restTemplate = new RestTemplate();
+                StringBuilder mensajeRank = new StringBuilder("🏆 *CLASIFICACIÓN CODEWARS* 🏆\n\n");
+
+                try {
+                    ResponseEntity<List<Map<String, Object>>> responseTop3 = restTemplate.exchange(
+                            USER_SERVICE_URL + "/top3",
+                            org.springframework.http.HttpMethod.GET,
+                            null,
+                            new org.springframework.core.ParameterizedTypeReference<List<Map<String, Object>>>() {
+                            });
+
+                    if (responseTop3.getStatusCode().is2xxSuccessful() && responseTop3.getBody() != null
+                            && !responseTop3.getBody().isEmpty()) {
+
+                        List<Map<String, Object>> top3 = responseTop3.getBody();
+                        String[] medallas = { "🥇", "🥈", "🥉" };
+
+                        for (int i = 0; i < top3.size(); i++) {
+                            Map<String, Object> u = top3.get(i);
+                            mensajeRank.append(medallas[i])
+                                    .append(" *").append(u.get("username")).append("* - ")
+                                    .append(u.get("score")).append(" px\n");
+                        }
+                    } else {
+                        mensajeRank.append("_El podio está vacío por ahora..._\n");
+                    }
+
+                    mensajeRank.append("\n━━━━━━━━━━━━━━━━━━━━━\n\n");
+
+                    try {
+                        ResponseEntity<Map<String, Object>> responseUser = restTemplate.exchange(
+                                USER_SERVICE_URL + "/" + userName,
+                                org.springframework.http.HttpMethod.GET,
+                                null,
+                                new org.springframework.core.ParameterizedTypeReference<Map<String, Object>>() {
+                                });
+
+                        if (responseUser.getStatusCode().is2xxSuccessful() && responseUser.getBody() != null) {
+                            Map<String, Object> miInfo = responseUser.getBody();
+                            mensajeRank.append("👤 *Tu clasificación actual (@").append(userName).append("):*\n")
+                                    .append("🏅 Posición: *#").append(miInfo.get("position")).append("*\n")
+                                    .append("⭐ Puntos: *").append(miInfo.get("score")).append(" px*");
+                        }
+                    } catch (Exception ex) {
+                        mensajeRank.append("⚠️ *¡Vaya, @").append(userName).append("!*\n")
+                                .append("No hemos encontrado tu perfil en la plataforma.\n")
+                                .append("Asegúrate de entrar al menos una vez para registrar tus datos.");
+                    }
+
+                } catch (Exception e) {
+                    mensajeRank = new StringBuilder(
+                            "⚠️ *¡Ups!* Los servidores están colapsados ahora mismo.\n" +
+                                    "No hemos podido obtener los datos del ranking. Inténtalo más tarde.");
+                    System.err.println("Error conectando con user-service para el /rank: " + e.getMessage());
+                }
 
                 response.put("response_type", "ephemeral");
-                response.put("text", mensajeRank);
+                response.put("text", mensajeRank.toString());
                 break;
 
             case "/duel":
@@ -187,13 +236,19 @@ public class SlackController {
                 response.put("text", "🤖 Conectando con la IA para tu pista...");
                 break;
 
-            case "info":
+            case "/info":
                 response.put("response_type", "ephemeral");
-                response.put("text", "ℹ️ *Comandos disponibles:*\n" +
-                        "• `/challenge` - Recibe un reto aleatorio para resolver.\n" +
-                        "• `/rank` - Consulta tu posición y estadísticas en Codewars.\n" +
-                        "• `/duel @usuario` - Desafía a otro desarrollador a un duelo de código.\n" +
-                        "• `/hint` - Obtén una pista para el reto que estás intentando resolver.");
+                response.put("text", "📚 *Información de la plataforma* 📚\n\n" +
+                        "¡Bienvenido a nuestro sistema de gamificación para desarrolladores!\n\n" +
+                        "*¿Qué es esto?*\n" +
+                        "Es una plataforma que convierte el aprendizaje de programación en una experiencia divertida y competitiva. Resuelve retos, sube en el ranking y compite con tus amigos.\n\n"
+                        +
+                        "*¿Cómo funciona?*\n" +
+                        "1. Usa el comando `/challenge` para recibir un reto aleatorio.\n" +
+                        "2. Resuélvelo en nuestro frontend y gana puntos.\n" +
+                        "3. Consulta tu posición en el ranking con `/rank`.\n" +
+                        "4. Desafía a tus amigos con `/duel @usuario`.\n\n" +
+                        "💡 *Consejo:* Cuantos más retos resuelvas, más puntos ganarás y subirás en la clasificación. ¡No te quedes atrás!");
                 break;
 
             default:

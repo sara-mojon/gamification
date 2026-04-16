@@ -1,3 +1,5 @@
+// frontend/src/pages/Perfil.tsx
+
 import { useState, useEffect } from "react";
 import { useAuth } from "react-oidc-context";
 import { User, Code, Star, Calendar, Activity } from "lucide-react";
@@ -24,6 +26,9 @@ export default function Perfil() {
   const username = auth.user?.profile.preferred_username || "Hacker Anónimo";
   const email = auth.user?.profile.email || "correo@oculto.com";
 
+  // --- VARIABLE DE ENTORNO DINÁMICA ---
+  const baseUrl = import.meta.env.VITE_USER_URL || 'http://localhost:8080';
+
   const [estadisticas, setEstadisticas] = useState<PerfilData>({
     puntos: 0,
     retosCompletados: 0,
@@ -40,7 +45,7 @@ export default function Perfil() {
       if (!token) return;
 
       try {
-        const response = await fetch('http://localhost:8080/api/users/me', {
+        const response = await fetch(`${baseUrl}/api/users/me`, {
           headers: {
             'Authorization': `Bearer ${token}`
           }
@@ -71,7 +76,7 @@ export default function Perfil() {
     };
 
     cargarMiPerfil();
-  }, [token]);
+  }, [token, baseUrl]);
 
   const cambiarLenguaje = async (e: React.ChangeEvent<HTMLSelectElement>) => {
     const nuevoLenguaje = e.target.value;
@@ -79,8 +84,8 @@ export default function Perfil() {
 
     if (!userId) return;
 
-    const peticion = fetch(`http://localhost:8080/api/update/user/${userId}`, {
-      method: 'PUT',
+    const peticion = fetch(`${baseUrl}/api/users/${userId}`, {
+      method: 'PATCH',
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json'

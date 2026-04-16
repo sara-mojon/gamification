@@ -10,7 +10,11 @@ import java.util.Optional;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.beans.factory.annotation.Value;
+
 import org.apache.poi.ss.usermodel.*;
+import org.slf4j.LoggerFactory;
+import org.slf4j.Logger;
 import org.springframework.web.reactive.function.client.WebClient;
 
 import es.masorange.backend.model.*;
@@ -19,8 +23,12 @@ import es.masorange.backend.repository.ChallengeRepository;
 @Service
 public class ChallengeService {
 
+    private static final Logger log = LoggerFactory.getLogger(ChallengeService.class);
     private final WebClient webClient;
     private final ChallengeRepository challengeRepository;
+
+    @Value("${ollama.url:http://localhost:11434}")
+    private String ollamaUrl;
 
     public ChallengeService(WebClient.Builder webClientBuilder, ChallengeRepository challengeRepository) {
         this.webClient = webClientBuilder.baseUrl("https://www.codewars.com/api/v1").build();
@@ -90,21 +98,24 @@ public class ChallengeService {
 
     public BasicResponseDTO updateChallenge(Long id, Challenge dto) {
         return challengeRepository.findById(id).map(existing -> {
-
-            Optional.ofNullable(dto.getName()).ifPresent(existing::setName);
-            Optional.ofNullable(dto.getDescription()).ifPresent(existing::setDescription);
-            Optional.ofNullable(dto.getRank()).ifPresent(existing::setRank);
-            Optional.ofNullable(dto.getSlug()).ifPresent(existing::setSlug);
-            Optional.ofNullable(dto.getIsVisible()).ifPresent(existing::setIsVisible);
-            Optional.ofNullable(dto.getTags()).ifPresent(existing::setTags);
-            Optional.ofNullable(dto.getLanguages()).ifPresent(existing::setLanguages);
-            Optional.ofNullable(dto.getTests()).ifPresent(existing::setTests);
-            Optional.ofNullable(dto.getTemplates()).ifPresent(existing::setTemplates);
+            if (dto.getName() != null)
+                existing.setName(dto.getName());
+            if (dto.getDescription() != null)
+                existing.setDescription(dto.getDescription());
+            if (dto.getRank() != null)
+                existing.setRank(dto.getRank());
+            if (dto.getIsVisible() != null)
+                existing.setIsVisible(dto.getIsVisible());
+            if (dto.getTags() != null && !dto.getTags().isEmpty()) {
+                existing.setTags(dto.getTags());
+            }
+            if (dto.getTests() != null && !dto.getTests().isEmpty()) {
+                existing.setTests(dto.getTests());
+            }
 
             challengeRepository.save(existing);
             return new BasicResponseDTO("Challenge actualizado correctamente", "200");
-
-        }).orElseGet(() -> new BasicResponseDTO("No se encontró el challenge con id: " + id, "404"));
+        }).orElseGet(() -> new BasicResponseDTO("No encontrado", "404"));
     }
 
     public BasicResponseDTO importChallengesFromFile(MultipartFile file) {
@@ -206,7 +217,7 @@ public class ChallengeService {
                     errorMsg = "Error desconocido";
                 }
                 detallesErrores.add("  • ID: " + id + " - " + errorMsg);
-                System.err.println("Fallo al importar el ID " + id + " desde el archivo: " + e.getMessage());
+                log.error("Fallo al importar el ID {} desde el archivo: {}", id, e.getMessage());
             }
         }
 
@@ -228,7 +239,6 @@ public class ChallengeService {
         return new BasicResponseDTO(mensajeFinal.toString().trim(), "200");
     }
 
-    @Transactional
     public BasicResponseDTO generateTestsWithAI(Long id) {
         Optional<Challenge> challengeOpt = challengeRepository.findById(id);
 
@@ -240,27 +250,29 @@ public class ChallengeService {
         String[] lenguajesObjetivo = { "javascript", "python", "java", "c" };
 
         for (String lang : lenguajesObjetivo) {
-            System.out.println("Generando test para " + challenge.getName() + " en " + lang + "...");
+            log.info("Generando test para {} en {} ...", challenge.getName(), lang);
             try {
                 String testGenerado = callOllamaToGenerateTest(challenge, lang);
 
                 if (testGenerado != null && !testGenerado.trim().isEmpty()) {
                     challenge.getTests().put(lang, testGenerado);
+                    challengeRepository.save(challenge);
+                    log.info("Test para {} generado correctamente", lang);
                 }
 
             } catch (Exception e) {
-                System.err.println("Error generando test en " + lang + ": " + e.getMessage());
+                log.error("Error generando test en {}: {} ", lang, e.getMessage());
             }
         }
 
-        challengeRepository.save(challenge);
+        log.info("Tests generados correctamente");
         return new BasicResponseDTO("Tests generados correctamente.", "200");
     }
 
     private String callOllamaToGenerateTest(Challenge challenge, String language) {
         String prompt = buildUniversalPrompt(language, challenge.getName(), challenge.getDescription());
         OllamaRequest requestBody = new OllamaRequest("qwen2.5-coder:7b", prompt, false);
-        WebClient ollamaClient = WebClient.builder().baseUrl("http://ollama-service:11434").build();
+        WebClient ollamaClient = WebClient.builder().baseUrl(ollamaUrl).build();
 
         try {
             OllamaResponse respuestaOllama = ollamaClient.post()
@@ -275,7 +287,7 @@ public class ChallengeService {
                 return cleanMarkdown(respuestaOllama.response());
             }
         } catch (Exception e) {
-            System.err.println("Fallo HTTP con Ollama: " + e.getMessage());
+            log.error("Fallo HTTP con Ollama: {}", e.getMessage());
         }
 
         return "";

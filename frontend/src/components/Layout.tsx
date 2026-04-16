@@ -1,3 +1,5 @@
+// frontend/src/components/Layout.tsx
+
 import { useState, useEffect } from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "react-oidc-context";
@@ -17,7 +19,9 @@ export default function Layout() {
     const sincronizarUsuario = async () => {
       if (auth.isAuthenticated && token) {
         try {
-          const response = await fetch('http://localhost:8080/api/users/sync', {
+          const baseUrl = import.meta.env.VITE_USER_URL || 'http://localhost:8080';
+          
+          const response = await fetch(`${baseUrl}/api/users/sync`, {
             method: 'POST',
             headers: {
               'Authorization': `Bearer ${token}`,
@@ -27,7 +31,8 @@ export default function Layout() {
           
           if (response.ok) {
             const userData = await response.json();
-            if (userData.role === "admin") {
+            const role = userData.role?.trim().toLowerCase();
+            if (role === "admin") {
               setIsAdmin(true);
             }
           }

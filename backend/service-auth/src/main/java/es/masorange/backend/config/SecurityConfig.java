@@ -39,7 +39,8 @@ public class SecurityConfig {
                 configuration.setAllowedOrigins(Arrays.asList(
                                 "http://localhost:5173",
                                 "https://frontend.sara.local",
-                                "http://frontend.sara.local"));
+                                "http://frontend.sara.local",
+                                "https://app.saramg.org"));
                 configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
                 configuration.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type", "Accept"));
                 configuration.setAllowCredentials(true);

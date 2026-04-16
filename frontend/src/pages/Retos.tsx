@@ -1,3 +1,5 @@
+// frontend/src/pages/Retos.tsx
+
 import { useState, useEffect } from "react";
 import { Terminal, Clock, ChevronRight, Search, Filter, ChevronLeft, Wand2, Pencil, Trash2, X, Eye, EyeOff, AlertTriangle, Download, Loader2, CheckCircle2, Plus, FileUp } from "lucide-react";
 import { useNavigate } from "react-router-dom";
@@ -38,6 +40,10 @@ export default function Retos() {
   const auth = useAuth();
   const token = auth.user?.access_token;
 
+  // --- VARIABLES DE ENTORNO DINÁMICAS ---
+  const baseUrlUsers = import.meta.env.VITE_USER_URL || 'http://localhost:8080';
+  const baseUrlChallenges = import.meta.env.VITE_CHALLENGES_URL || import.meta.env.VITE_USER_URL || 'http://localhost:8081';
+
   const [retos, setRetos] = useState<FrontendChallenge[]>([]);
   const [cargando, setCargando] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -67,12 +73,13 @@ export default function Retos() {
   useEffect(() => {
     const comprobarAdmin = async () => {
       try {
-        const res = await fetch('http://localhost:8080/api/users/me', {
+        const res = await fetch(`${baseUrlUsers}/api/users/me`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         if (res.ok) {
           const userData = await res.json();
-          if (userData.role === "admin") setIsAdmin(true);
+          const role = userData.role?.trim().toLowerCase();
+          if (role === "admin") setIsAdmin(true);
         }
       } catch {
         console.error("Error al verificar rol de admin");
@@ -81,7 +88,7 @@ export default function Retos() {
 
     const cargarRetos = async () => {
       try {
-        const response = await fetch('http://localhost:8081/api/challenges/', {
+        const response = await fetch(`${baseUrlChallenges}/api/challenges`, {
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
@@ -139,7 +146,7 @@ export default function Retos() {
     } else if (!auth.isLoading) {
       setCargando(false);
     }
-  }, [token, auth.isLoading]);
+  }, [token, auth.isLoading, baseUrlUsers, baseUrlChallenges]);
 
   const ejecutarImportar = async () => {
     // --- Lógica si hay un archivo Excel seleccionado ---
@@ -151,7 +158,7 @@ export default function Retos() {
         const dataFormulario = new FormData();
         dataFormulario.append("file", archivoExcel);
         
-        const response = await fetch(`http://localhost:8081/api/challenges/import/excel`, {
+        const response = await fetch(`${baseUrlChallenges}/api/challenges/import/excel`, {
           method: "POST",
           headers: { 'Authorization': `Bearer ${token}` },
           body: dataFormulario
@@ -207,7 +214,7 @@ export default function Retos() {
 
     try {
       const peticiones = idsValidos.map(id => 
-        fetch(`http://localhost:8081/api/challenges/import/${id}`, {
+        fetch(`${baseUrlChallenges}/api/challenges/import/${id}`, {
           method: "POST",
           headers: { 'Authorization': `Bearer ${token}` }
         })
@@ -296,7 +303,7 @@ export default function Retos() {
 
   const ejecutarEliminar = async () => {
     try {
-      const response = await fetch(`http://localhost:8081/api/challenges/${modalEliminar.id}`, {
+      const response = await fetch(`${baseUrlChallenges}/api/challenges/${modalEliminar.id}`, {
         method: "DELETE",
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -330,16 +337,18 @@ export default function Retos() {
     try {
       const tagsArray = formData.tags.split(',').map(tag => tag.trim()).filter(tag => tag !== "");
 
-      const payload = {
+      const payload: Partial<BackendChallenge> = {
         name: formData.name,
         description: formData.description,
         rank: formData.rank,
         isVisible: formData.isVisible,
-        tags: tagsArray,
-        tests: formData.tests 
+        tags: tagsArray
       };
+      if (formData.tests && Object.keys(formData.tests).length > 0) {
+        payload.tests = formData.tests;
+      }
 
-      const response = await fetch(`http://localhost:8081/api/challenges/${modalEditar.id}`, {
+      const response = await fetch(`${baseUrlChallenges}/api/challenges/${modalEditar.id}`, {
         method: "PATCH",
         headers: { 
           'Authorization': `Bearer ${token}`,
@@ -352,22 +361,24 @@ export default function Retos() {
         let nuevaDificultad = "Normal";
         let nuevoColor = "#ff9800"; 
         let nuevoTiempo = 20;
-        if (payload.rank >= 7) { nuevaDificultad = "Fácil"; nuevoColor = "#4caf50"; nuevoTiempo = 10; } 
-        else if (payload.rank <= 4) { nuevaDificultad = "Difícil"; nuevoColor = "#ff4b4b"; nuevoTiempo = 45; }
+        
+        // Usamos formData en lugar de payload para evitar los errores de TypeScript
+        if (formData.rank >= 7) { nuevaDificultad = "Fácil"; nuevoColor = "#4caf50"; nuevoTiempo = 10; } 
+        else if (formData.rank <= 4) { nuevaDificultad = "Difícil"; nuevoColor = "#ff4b4b"; nuevoTiempo = 45; }
 
         setRetos(retos.map(r => r.id === modalEditar.id ? { 
             ...r, 
-            titulo: payload.name,
-            descripcionOriginal: payload.description,
-            descripcion: payload.description.replace(/<[^>]+>/g, '').substring(0, 150) + "...",
-            rangoRaw: payload.rank,
+            titulo: formData.name,
+            descripcionOriginal: formData.description,
+            descripcion: formData.description.replace(/<[^>]+>/g, '').substring(0, 150) + "...",
+            rangoRaw: formData.rank,
             dificultad: nuevaDificultad,
             colorDificultad: nuevoColor,
             tiempoEstimado: nuevoTiempo,
-            isVisible: payload.isVisible,
-            etiquetas: payload.tags,
-            tests: payload.tests,
-            tieneTests: tieneTests
+            isVisible: formData.isVisible,
+            etiquetas: tagsArray, // Usamos la variable tagsArray que creaste justo arriba
+            tests: payload.tests ? payload.tests : r.tests,
+            tieneTests: payload.tests ? true : r.tieneTests
         } : r));
 
         setModalEditar({ abierto: false, id: "" });
@@ -388,7 +399,7 @@ export default function Retos() {
     }
 
     try {
-      const response = await fetch(`http://localhost:8081/api/challenges/${reto.id}`, {
+      const response = await fetch(`${baseUrlChallenges}/api/challenges/${reto.id}`, {
         method: "PATCH",
         headers: { 
           'Authorization': `Bearer ${token}`,
@@ -407,7 +418,7 @@ export default function Retos() {
   const generarTestsConIA = (retoId: string, tituloReto: string) => {
     if (!token) return;
 
-    const peticionIA = fetch(`http://localhost:8081/api/challenges/generate/test/${retoId}`, {
+    const peticionIA = fetch(`${baseUrlChallenges}/api/challenges/generate/test/${retoId}`, {
       method: "POST",
       headers: { 'Authorization': `Bearer ${token}` }
     }).then(async (res) => {
@@ -415,9 +426,12 @@ export default function Retos() {
       const data = await res.json();
       
       setRetos(retosActuales => 
-        retosActuales.map(r => r.id === retoId ? { ...r, tieneTests: true } : r)
+        retosActuales.map(r => 
+          r.id === retoId 
+            ? { ...r, tieneTests: true, tests: data.tests || r.tests } // Si el back te devuelve los tests, ponlos aquí
+            : r
+        )
       );
-      
       return data;
     });
 

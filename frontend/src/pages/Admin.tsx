@@ -1,3 +1,5 @@
+// frontend/src/pages/Admin.tsx
+
 import { useState, useEffect } from "react";
 import { useAuth } from "react-oidc-context";
 import { ShieldAlert, Users, Search, Trash2, Shield, User as UserIcon, Loader2, Mail, X } from "lucide-react";
@@ -18,6 +20,9 @@ export default function Admin() {
   const auth = useAuth();
   const token = auth.user?.access_token;
 
+  // --- VARIABLE DE ENTORNO DINÁMICA ---
+  const baseUrl = import.meta.env.VITE_USER_URL || 'http://localhost:8080';
+
   const [usuarios, setUsuarios] = useState<User[]>([]);
   const [cargando, setCargando] = useState(true);
   const [busqueda, setBusqueda] = useState("");
@@ -28,16 +33,17 @@ export default function Admin() {
   const modalStyle: React.CSSProperties = { backgroundColor: "white", padding: "30px", borderRadius: "10px", width: "90%", maxWidth: "500px", position: "relative", boxShadow: "0 10px 25px rgba(0,0,0,0.2)", overflow: "hidden" };
   const btnCerrarStyle: React.CSSProperties = { position: "absolute", top: "15px", right: "15px", background: "none", border: "none", cursor: "pointer", color: "#888" };
 
-
   useEffect(() => {
     const verificarAcceso = async () => {
       try {
-        const res = await fetch('http://localhost:8080/api/users/me', {
+        const res = await fetch(`${baseUrl}/api/users/me`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         if (res.ok) {
           const userData = await res.json();
-          if (userData.role === "admin") {
+          const role = userData.role?.trim().toLowerCase();
+
+          if (role === "admin") {
             setEsAdminGlobal(true);
             cargarUsuarios();
           } else {
@@ -52,12 +58,16 @@ export default function Admin() {
 
     const cargarUsuarios = async () => {
       try {
-        const res = await fetch('http://localhost:8080/api/users', {
+        const res = await fetch(`${baseUrl}/api/users`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         if (res.ok) {
           const data = await res.json();
-          setUsuarios(data);
+          const dataNormalizada = data.map((u: User) => ({
+            ...u,
+            role: u.role ? u.role.toLowerCase() : "user"
+          }));
+          setUsuarios(dataNormalizada);
         } else {
           toast.error("Error al cargar la lista de usuarios");
         }
@@ -70,12 +80,12 @@ export default function Admin() {
     };
 
     if (token) verificarAcceso();
-  }, [token]);
+  }, [token, baseUrl]);
 
   // --- FUNCIÓN: CAMBIAR ROL ---
   const cambiarRol = async (idUsuario: number, nuevoRol: string, nombreUsuario: string) => {
-    const peticion = fetch(`http://localhost:8080/api/update/user/${idUsuario}`, {
-      method: "PUT",
+    const peticion = fetch(`${baseUrl}/api/users/${idUsuario}`, {
+      method: "PATCH",
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json'
@@ -106,7 +116,7 @@ export default function Admin() {
     
     setModalEliminar({ abierto: false, id: 0, nombre: "" });
 
-    const peticion = fetch(`http://localhost:8080/api/delete/user/${id}`, {
+    const peticion = fetch(`${baseUrl}/api/users/${id}`, {
       method: "DELETE",
       headers: { 'Authorization': `Bearer ${token}` }
     }).then(async (res) => {
@@ -130,7 +140,6 @@ export default function Admin() {
     u.username.toLowerCase().includes(busqueda.toLowerCase()) || 
     (u.email && u.email.toLowerCase().includes(busqueda.toLowerCase()))
   );
-
 
   if (cargando) {
     return (
