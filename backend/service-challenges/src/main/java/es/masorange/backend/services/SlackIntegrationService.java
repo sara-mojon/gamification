@@ -318,7 +318,8 @@ public class SlackIntegrationService {
         limpia = limpia.replace("<br>", "\n").replace("<p>", "").replace("</p>", "\n");
         limpia = limpia.replaceAll("(?m)^#{1,6}\\s+(.+)$", "*$1*");
         limpia = limpia.replaceAll("\\*\\*(.*?)\\*\\*", "*$1*");
-        limpia = limpia.replaceAll("\\$([^\\$]+)\\$", "`$1`");
+        limpia = limpia.replaceAll("`\\s*\\${1,2}\\s*([^`$]+?)\\s*\\${1,2}\\s*`", "`$1`");
+        limpia = limpia.replaceAll("\\${1,2}\\s*([^$]+?)\\s*\\${1,2}", "`$1`");
         limpia = limpia.replaceAll("\\[([^\\]]+)\\]\\(([^\\)]+)\\)", "<$2|$1>");
         if (limpia.length() > 600) {
             limpia = limpia.substring(0, 600)

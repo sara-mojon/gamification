@@ -11,7 +11,7 @@ import org.springframework.stereotype.Repository;
 @Repository
 public interface ChallengeRepository extends JpaRepository<Challenge, Long> {
 
-    @Query(value = "SELECT * FROM challenges ORDER BY RANDOM() LIMIT 1", nativeQuery = true)
+    @Query(value = "SELECT * FROM challenges WHERE is_visible = true ORDER BY RANDOM() LIMIT 1", nativeQuery = true)
     Optional<Challenge> findRandomChallenge();
 
     Optional<Challenge> findByIdCodeWars(String idCodeWars);
