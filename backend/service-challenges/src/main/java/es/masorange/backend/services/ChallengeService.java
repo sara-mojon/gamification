@@ -8,7 +8,6 @@ import java.util.List;
 import java.util.Optional;
 
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.beans.factory.annotation.Value;
 
@@ -36,6 +35,7 @@ public class ChallengeService {
     }
 
     public CodeWarsChallengeDTO importChallengeFromCodeWars(String challengeId) {
+        log.info("Consultando la API de CodeWars para el challenge ID: {}", challengeId);
 
         CodeWarsChallengeDTO dto = this.webClient.get()
                 .uri("/code-challenges/{id}", challengeId)
@@ -44,22 +44,25 @@ public class ChallengeService {
                 .block();
 
         if (dto != null) {
+            log.info("Datos obtenidos correctamente de CodeWars para: {}", dto.name());
             saveChallenge(dto);
+        } else {
+            log.warn("La API de CodeWars no devolvió datos para el ID: {}", challengeId);
         }
 
         return dto;
-
     }
 
     public BasicResponseDTO saveChallenge(CodeWarsChallengeDTO dto) {
+        log.info("Intentando guardar en BBDD el challenge: {}", dto.id());
         Optional<Challenge> challenge = challengeRepository.findByIdCodeWars(dto.id());
 
         if (challenge.isPresent()) {
+            log.warn("El challenge con CodeWars ID {} ya existe en la base de datos. Se omite el guardado.", dto.id());
             return new BasicResponseDTO("El challenge ya existe en la BBDD", "409");
         }
 
         Challenge newChallenge = new Challenge();
-
         newChallenge.setIdCodeWars(dto.id());
         newChallenge.setName(dto.name());
         newChallenge.setSlug(dto.slug());
@@ -71,32 +74,46 @@ public class ChallengeService {
         }
 
         challengeRepository.save(newChallenge);
+        log.info("✅ Challenge '{}' guardado exitosamente en la BBDD", newChallenge.getName());
 
         return new BasicResponseDTO("Challenge creado correctamente", "201");
     }
 
     public List<Challenge> getAllChallenges() {
+        log.info("Recuperando todos los challenges de la BBDD...");
         List<Challenge> allChallenges = challengeRepository.findAll();
-
+        log.info("Se han recuperado {} challenges", allChallenges.size());
         return allChallenges;
     }
 
     public Optional<Challenge> getChallenge(Long id) {
-        return challengeRepository.findById(id);
+        log.info("Buscando challenge con ID interno: {}", id);
+        Optional<Challenge> challenge = challengeRepository.findById(id);
+
+        if (challenge.isEmpty()) {
+            log.warn("No se encontró ningún challenge con ID: {}", id);
+        }
+
+        return challenge;
     }
 
     public BasicResponseDTO deleteChallenge(Long id) {
+        log.info("Petición de eliminación para el challenge con ID: {}", id);
         Optional<Challenge> challenge = challengeRepository.findById(id);
 
         if (challenge.isPresent()) {
             challengeRepository.deleteById(id);
+            log.info("✅ Challenge con ID {} eliminado correctamente", id);
             return new BasicResponseDTO("Challenge eliminado correctamente", "200");
         }
-        return new BasicResponseDTO("El id proporcionado no existe en la BBDD", "404");
 
+        log.warn("No se pudo eliminar: El challenge con ID {} no existe en la BBDD", id);
+        return new BasicResponseDTO("El id proporcionado no existe en la BBDD", "404");
     }
 
     public BasicResponseDTO updateChallenge(Long id, Challenge dto) {
+        log.info("Petición de actualización para el challenge con ID: {}", id);
+
         return challengeRepository.findById(id).map(existing -> {
             if (dto.getName() != null)
                 existing.setName(dto.getName());
@@ -114,23 +131,30 @@ public class ChallengeService {
             }
 
             challengeRepository.save(existing);
+            log.info("✅ Challenge con ID {} actualizado correctamente", id);
             return new BasicResponseDTO("Challenge actualizado correctamente", "200");
-        }).orElseGet(() -> new BasicResponseDTO("No encontrado", "404"));
+
+        }).orElseGet(() -> {
+            log.warn("Fallo de actualización: No se encontró el challenge con ID {}", id);
+            return new BasicResponseDTO("No encontrado", "404");
+        });
     }
 
     public BasicResponseDTO importChallengesFromFile(MultipartFile file) {
         if (file.isEmpty()) {
+            log.warn("Intento de importación masiva fallido: El archivo está vacío");
             return new BasicResponseDTO("El archivo está vacío", "400");
         }
 
         List<String> idsAImportar = new ArrayList<>();
         String filename = file.getOriginalFilename();
 
+        log.info("Iniciando procesamiento del archivo de importación: {}", filename);
+
         try {
             // --- LÓGICA PARA EXCEL (.xlsx o .xls) ---
             if (filename != null && (filename.endsWith(".xlsx") || filename.endsWith(".xls"))) {
                 try (Workbook workbook = WorkbookFactory.create(file.getInputStream())) {
-                    // Cogemos la primera hoja (pestaña) del Excel
                     Sheet sheet = workbook.getSheetAt(0);
                     boolean primeraLinea = true;
 
@@ -189,12 +213,16 @@ public class ChallengeService {
                 }
             }
         } catch (Exception e) {
+            log.error("Error crítico al procesar el archivo {}: {}", filename, e.getMessage(), e);
             return new BasicResponseDTO("Error al leer el archivo: " + e.getMessage(), "500");
         }
 
         if (idsAImportar.isEmpty()) {
+            log.warn("El archivo {} fue procesado pero no se extrajeron IDs válidos", filename);
             return new BasicResponseDTO("No se encontraron IDs válidos en el archivo", "400");
         }
+
+        log.info("Archivo procesado con éxito. Extraídos {} IDs para importar a BBDD.", idsAImportar.size());
 
         // --- IMPORTACIÓN DE LOS RETOS ---
         List<String> detallesExitos = new ArrayList<>();
@@ -217,9 +245,12 @@ public class ChallengeService {
                     errorMsg = "Error desconocido";
                 }
                 detallesErrores.add("  • ID: " + id + " - " + errorMsg);
-                log.error("Fallo al importar el ID {} desde el archivo: {}", id, e.getMessage());
+                log.error("Fallo durante la importación masiva del ID {}: {}", id, errorMsg);
             }
         }
+
+        log.info("Importación masiva finalizada. Éxitos: {}, Errores: {}", detallesExitos.size(),
+                detallesErrores.size());
 
         StringBuilder mensajeFinal = new StringBuilder();
         if (!detallesExitos.isEmpty()) {
@@ -240,9 +271,11 @@ public class ChallengeService {
     }
 
     public BasicResponseDTO generateTestsWithAI(Long id) {
+        log.info("Solicitada generación de tests con IA para el challenge ID: {}", id);
         Optional<Challenge> challengeOpt = challengeRepository.findById(id);
 
         if (challengeOpt.isEmpty()) {
+            log.warn("Abortando generación de IA: No se encontró el challenge con ID: {}", id);
             return new BasicResponseDTO("No se encontró el challenge con id: " + id, "404");
         }
 
@@ -250,22 +283,24 @@ public class ChallengeService {
         String[] lenguajesObjetivo = { "javascript", "python", "java", "c" };
 
         for (String lang : lenguajesObjetivo) {
-            log.info("Generando test para {} en {} ...", challenge.getName(), lang);
+            log.info("🧠 Ollama trabajando: Generando test para '{}' en [{}] ...", challenge.getName(), lang);
             try {
                 String testGenerado = callOllamaToGenerateTest(challenge, lang);
 
                 if (testGenerado != null && !testGenerado.trim().isEmpty()) {
                     challenge.getTests().put(lang, testGenerado);
                     challengeRepository.save(challenge);
-                    log.info("Test para {} generado correctamente", lang);
+                    log.info("Test para [{}] generado y guardado correctamente", lang);
+                } else {
+                    log.warn("Ollama devolvió un test vacío para [{}]", lang);
                 }
 
             } catch (Exception e) {
-                log.error("Error generando test en {}: {} ", lang, e.getMessage());
+                log.error("Error grave generando test en [{}]: {}", lang, e.getMessage(), e);
             }
         }
 
-        log.info("Tests generados correctamente");
+        log.info("Flujo de generación de tests con IA finalizado para el challenge ID: {}", id);
         return new BasicResponseDTO("Tests generados correctamente.", "200");
     }
 
@@ -287,7 +322,7 @@ public class ChallengeService {
                 return cleanMarkdown(respuestaOllama.response());
             }
         } catch (Exception e) {
-            log.error("Fallo HTTP con Ollama: {}", e.getMessage());
+            log.error("Fallo HTTP al conectar con el servidor Ollama: {}", e.getMessage(), e);
         }
 
         return "";
@@ -338,5 +373,4 @@ public class ChallengeService {
         }
         return cleaned;
     }
-
 }
