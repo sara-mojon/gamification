@@ -2,6 +2,7 @@ package es.masorange.backend.model;
 
 import jakarta.persistence.*;
 import lombok.*;
+import java.time.LocalDate;
 
 @Entity
 @Table(name = "users")
@@ -30,5 +31,11 @@ public class User {
     private Integer score = 0;
 
     private String preferredLanguage = "Java";
+
+    @Column(name = "current_streak")
+    private Integer currentStreak = 0;
+
+    @Column(name = "last_solve_date")
+    private LocalDate lastSolveDate;
 
 }
