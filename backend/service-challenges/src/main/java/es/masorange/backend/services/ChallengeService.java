@@ -5,6 +5,7 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import org.springframework.stereotype.Service;
@@ -18,6 +19,7 @@ import org.springframework.web.reactive.function.client.WebClient;
 
 import es.masorange.backend.model.*;
 import es.masorange.backend.repository.ChallengeRepository;
+import es.masorange.backend.repository.PromptTemplateRepository;
 
 @Service
 public class ChallengeService {
@@ -25,13 +27,16 @@ public class ChallengeService {
     private static final Logger log = LoggerFactory.getLogger(ChallengeService.class);
     private final WebClient webClient;
     private final ChallengeRepository challengeRepository;
+    private final PromptTemplateRepository promptTemplateRepository;
 
     @Value("${ollama.url:http://localhost:11434}")
     private String ollamaUrl;
 
-    public ChallengeService(WebClient.Builder webClientBuilder, ChallengeRepository challengeRepository) {
+    public ChallengeService(WebClient.Builder webClientBuilder, ChallengeRepository challengeRepository,
+            PromptTemplateRepository promptTemplateRepository) {
         this.webClient = webClientBuilder.baseUrl("https://www.codewars.com/api/v1").build();
         this.challengeRepository = challengeRepository;
+        this.promptTemplateRepository = promptTemplateRepository;
     }
 
     public CodeWarsChallengeDTO importChallengeFromCodeWars(String challengeId) {
@@ -288,6 +293,20 @@ public class ChallengeService {
                 String testGenerado = callOllamaToGenerateTest(challenge, lang);
 
                 if (testGenerado != null && !testGenerado.trim().isEmpty()) {
+
+                    // --- CORTE POR ZONA DE CONTENCIÓN ---
+                    String markerJava = "// === END OF TEST CLASS ===";
+                    if (lang.equals("java") && testGenerado.contains(markerJava)) {
+                        // Cortamos todo lo que haya desde el marcador hacia abajo
+                        testGenerado = testGenerado.substring(0, testGenerado.indexOf(markerJava)).trim();
+                    }
+
+                    String markerC = "// === END OF TEST FILE ===";
+                    if (lang.equals("c") && testGenerado.contains(markerC)) {
+                        // Cortamos todo lo que haya desde el marcador hacia abajo
+                        testGenerado = testGenerado.substring(0, testGenerado.indexOf(markerC)).trim();
+                    }
+
                     challenge.getTests().put(lang, testGenerado);
                     challengeRepository.save(challenge);
                     log.info("Test para [{}] generado y guardado correctamente", lang);
@@ -305,8 +324,28 @@ public class ChallengeService {
     }
 
     private String callOllamaToGenerateTest(Challenge challenge, String language) {
-        String prompt = buildUniversalPrompt(language, challenge.getName(), challenge.getDescription());
-        OllamaRequest requestBody = new OllamaRequest("qwen2.5-coder:7b", prompt, false);
+        // 1. Buscamos el prompt en la base de datos
+        Optional<PromptTemplate> templateOpt = promptTemplateRepository.findByLanguageAndActiveTrue(language);
+
+        if (templateOpt.isEmpty()) {
+            log.error("No se encontró un prompt template activo para el lenguaje: {}", language);
+            return "";
+        }
+
+        // 2. Reemplazamos la variable {DESCRIPTION} por la descripción real del reto
+        String prompt = templateOpt.get().getTemplateContent().replace("{DESCRIPTION}", challenge.getDescription());
+
+        // 3. Configuramos Opciones (BAJA TEMPERATURA = CÓDIGO MÁS ESTRICTO)
+        Map<String, Object> options = Map.of(
+                "temperature", 0.4,
+                "num_predict", 2048,
+                "num_ctx", 8192,
+                "top_k", 40,
+                "top_p", 0.9,
+                "repeat_penalty", 1.1);
+
+        // 4. Creamos la petición enviando las opciones
+        OllamaRequest requestBody = new OllamaRequest("qwen2.5-coder:7b", prompt, false, options);
         WebClient ollamaClient = WebClient.builder().baseUrl(ollamaUrl).build();
 
         try {
@@ -328,36 +367,6 @@ public class ChallengeService {
         return "";
     }
 
-    private String buildUniversalPrompt(String language, String title, String description) {
-        return """
-                You are a Senior QA Engineer.
-                Task: Write a COMPLETE standalone test script in %s that tests a user's solution.
-
-                MANDATORY RULES:
-                1. DO NOT define the solution function yourself. Assume the user's code (the solution) is already injected and available in the global scope.
-                2. DO NOT use external testing frameworks (like JUnit, Jest, PyTest, etc.). You must write a custom mini-framework because we need a specific custom JSON output.
-                3. You MUST catch all errors and assertions manually so the script does not crash before printing the final result.
-
-                JSON REPORTING FORMAT (CRITICAL):
-                Your script must collect the results of 4 to 6 robust test cases and print exactly ONE line to standard output (stdout) at the end of the execution. It must match this exact format:
-                ||JSON_RESULT||{"total": 2, "passed": 1, "failed": 1, "results": [{"name": "Test Basic", "status": "OK"}, {"name": "Test Edge Case", "status": "FAIL", "error": "Details..."}]}
-
-                IMPORTANT: If %s requires external libraries to build JSON (like Java, C, or C++ standard libraries), you MUST construct the JSON string manually using string concatenation/formatting and escape quotes properly.
-
-                INSTRUCTIONS:
-                1. Output the FULL script.
-                2. Focus on testing values, edge cases, and typical constraints for the problem: "%s".
-                3. Return ONLY valid, compilable %s code. NO markdown formatting, NO explanations, NO intro. Code only.
-
-                INPUT DESCRIPTION:
-                ---
-                %s
-                ---
-                Generate %s code now:
-                """
-                .formatted(language, language, title, language, description, language);
-    }
-
     private String cleanMarkdown(String text) {
         if (text == null)
             return "";
@@ -373,4 +382,5 @@ public class ChallengeService {
         }
         return cleaned;
     }
+
 }

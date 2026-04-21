@@ -7,6 +7,7 @@ import Editor from "@monaco-editor/react";
 import { ChevronLeft, Play, CheckCircle } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 
+// --- TIPOS ---
 interface Reto {
   id?: number;
   name: string;
@@ -16,11 +17,19 @@ interface Reto {
   };
 }
 
+interface ParsedResult {
+  status: 'success' | 'error';
+  title: string;
+  message: string;
+  details: string;
+}
+
+// --- CONSTANTES ---
 const plantillasCodigo = {
-  javascript: "// Escribe aquí tu solución en JavaScript...\n\nfunction resolver() {\n  \n}",
-  python: "# Escribe aquí tu solución en Python...\n\ndef resolver():\n    pass\n",
-  java: "// Escribe aquí tu solución en Java...\n\npublic class Solution {\n    public static void main(String[] args) {\n        \n    }\n}",
-  c: "// Escribe aquí tu solución en C...\n\n#include <stdio.h>\n\nint main() {\n    \n    return 0;\n}"
+  javascript: "// Escribe aquí tu solución en JavaScript...\n\nfunction solution(/* parámetros */) {\n  \n}",
+  python: "# Escribe aquí tu solución en Python...\n\ndef solution(/* parámetros */):\n    pass\n",
+  java: "// Escribe aquí tu solución en Java...\n// Tu código será inyectado en la clase Main automáticamente.\n\npublic static /* tipo */ solution(/* parámetros */) {\n    \n}",
+  c: "// Escribe aquí tu solución en C...\n// No incluyas la función main(), solo tu lógica.\n\n/* tipo */ solution(/* parámetros */) {\n    \n}"
 };
 
 const nombresArchivo = {
@@ -30,19 +39,77 @@ const nombresArchivo = {
   c: "main.c"
 };
 
+// --- HELPER DE PARSEO ---
+const parseTestResult = (rawOutput: string): ParsedResult => {
+  const safeOutput = rawOutput || "";
+  const jsonMarker = "||JSON_RESULT||";
+  const jsonIndex = safeOutput.indexOf(jsonMarker);
+
+  if (jsonIndex !== -1) {
+    try {
+      const jsonString = safeOutput.substring(jsonIndex + jsonMarker.length).trim();
+      const report = JSON.parse(jsonString);
+      const userLogs = safeOutput.substring(0, jsonIndex).trim();
+      
+      const buildDetails = () => {
+          let text = userLogs ? `[TU OUTPUT]\n${userLogs}\n\n` : "";
+          text += "[RESULTADO DE LOS TESTS]\n";
+          report.results.forEach((r: any) => {
+              const icon = r.status === "OK" ? "✅" : "❌";
+              text += `${icon} ${r.name}`;
+              if (r.status === "FAIL" && r.error) text += `\n   ↳ Error: ${r.error}`;
+              text += "\n";
+          });
+          return text;
+      };
+
+      if (report.failed === 0) {
+          return {
+              status: 'success',
+              title: '✅ MISIÓN CUMPLIDA',
+              message: `Tests pasados: ${report.passed}/${report.total}.`,
+              details: buildDetails()
+          };
+      } else {
+          return {
+              status: 'error',
+              title: '❌ TESTS FALLIDOS',
+              message: `Has fallado ${report.failed} de ${report.total} tests.`,
+              details: buildDetails()
+          };
+      }
+    } catch (e) {
+      console.error("Error parseando reporte JSON:", e);
+    }
+  }
+
+  // Si no hay JSON, es que hubo un error de compilación/ejecución
+  return {
+      status: 'error',
+      title: '⚠️ ERROR DEL SISTEMA',
+      message: 'El código no pudo ejecutarse o tiene errores de sintaxis.',
+      details: `[LOGS DE SISTEMA]\n${safeOutput}`
+  };
+};
+
 export default function Entrenar() {
   const { id } = useParams();
   const navigate = useNavigate();
   const auth = useAuth();
   const token = auth.user?.access_token;
   
+  // --- ESTADOS ---
   const [retoActual, setRetoActual] = useState<Reto | null>(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState("");
-
-  const [lenguaje, setLenguaje] = useState<"javascript" | "python" | "java" | "c">("javascript");;
+  
+  const [lenguaje, setLenguaje] = useState<"javascript" | "python" | "java" | "c">("javascript");
   const [codigo, setCodigo] = useState(plantillasCodigo.javascript);
+  
+  const [submitting, setSubmitting] = useState(false); // <-- AQUÍ AÑADIMOS EL ESTADO
+  const [result, setResult] = useState<ParsedResult | null>(null); // Estado para guardar el resultado de Judge0
 
+  // --- CONFIG URIs ---
   const baseUrlUsers = import.meta.env.VITE_USER_URL || 'http://localhost:8080';
   const baseUrlChallenges = import.meta.env.VITE_CHALLENGES_URL || import.meta.env.VITE_USER_URL || 'http://localhost:8081';
 
@@ -74,8 +141,7 @@ export default function Entrenar() {
           const datosPerfil = await resPerfil.json();
           if (datosPerfil.preferred_language) {
             const langFav = datosPerfil.preferred_language.toLowerCase() as "javascript" | "python" | "java" | "c";
-            
-            if (langFav === "javascript" || langFav === "python" || langFav === "java" || langFav === "c") {
+            if (["javascript", "python", "java", "c"].includes(langFav)) {
               setLenguaje(langFav);
               setCodigo(plantillasCodigo[langFav]);
             }
@@ -96,10 +162,45 @@ export default function Entrenar() {
     const nuevoLenguaje = e.target.value as "javascript" | "python" | "java" | "c";
     setLenguaje(nuevoLenguaje);
     setCodigo(plantillasCodigo[nuevoLenguaje]); 
+    setResult(null); // Limpiamos resultados al cambiar de lenguaje
   };
 
-  const ejecutarCodigo = () => {
-    alert(`¡Aquí enviaremos el código a Spring Boot para validarlo!\nLenguaje: ${lenguaje}\nTu código:\n` + codigo);
+  const ejecutarCodigo = async () => {
+    if (!codigo || !retoActual || !token) return;
+    
+    setSubmitting(true);
+    setResult(null); // Limpiamos resultados anteriores
+    
+    try {
+      const response = await fetch(`${baseUrlChallenges}/api/challenges/${retoActual.id}/submit`, {
+        method: 'POST',
+        headers: { 
+          'Authorization': `Bearer ${token}`, 
+          'Content-Type': 'application/json' 
+        },
+        body: JSON.stringify({ 
+          language: lenguaje, 
+          sourceCode: codigo 
+        })
+      });
+
+      if (!response.ok) throw new Error("Fallo en la evaluación");
+      
+      const rawOutput = await response.text(); // String puro de Spring Boot
+      const parsed = parseTestResult(rawOutput); 
+      setResult(parsed); 
+
+    } catch (err) {
+      console.error(err);
+      setResult({
+        status: 'error',
+        title: '❌ ERROR DE CONEXIÓN',
+        message: 'No se pudo contactar con Judge0.',
+        details: 'Revisa que los servicios backend y de evaluación estén corriendo.'
+      });
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   if (cargando) {
@@ -119,27 +220,11 @@ export default function Entrenar() {
   }
 
   return (
-    <div style={{ 
-      display: "grid", 
-      gridTemplateColumns: "0.75fr 1fr", 
-      height: "calc(100vh - 65px)", 
-      margin: "-40px", 
-      overflow: "hidden" 
-    }}>
+    <div style={{ display: "grid", gridTemplateColumns: "0.75fr 1fr", height: "calc(100vh - 65px)", margin: "-40px", overflow: "hidden" }}>
       
-      {/* PANEL IZQUIERDO (Descripción) */}
-      <div style={{ 
-        padding: "40px", 
-        backgroundColor: "#f9f9f9", 
-        borderRight: "1px solid #ddd", 
-        overflowY: "auto",
-        display: "flex", 
-        flexDirection: "column" 
-      }}>
-        <button 
-          onClick={() => navigate("/retos")}
-          style={{ display: "flex", alignItems: "center", background: "none", border: "none", color: "#666", cursor: "pointer", marginBottom: "20px", padding: 0, fontWeight: "bold", flexShrink: 0 }}
-        >
+      {/* PANEL IZQUIERDO (Descripción y Resultados) */}
+      <div style={{ padding: "40px", backgroundColor: "#f9f9f9", borderRight: "1px solid #ddd", overflowY: "auto", display: "flex", flexDirection: "column" }}>
+        <button onClick={() => navigate("/retos")} style={{ display: "flex", alignItems: "center", background: "none", border: "none", color: "#666", cursor: "pointer", marginBottom: "20px", padding: 0, fontWeight: "bold", flexShrink: 0 }}>
           <ChevronLeft size={20} /> Volver a los retos
         </button>
 
@@ -151,43 +236,52 @@ export default function Entrenar() {
         </div>
 
         <h3 style={{ borderBottom: "2px solid #ddd", paddingBottom: "10px", color: "#333", display: "flex", alignItems: "center", flexShrink: 0 }}>
-          <CheckCircle size={18} style={{ marginRight: "10px", color: "#888" }} />
-          Descripción del problema
+          <CheckCircle size={18} style={{ marginRight: "10px", color: "#888" }} /> Descripción del problema
         </h3>
         
         <div style={{ color: "#555", lineHeight: "1.6", fontSize: "1.05rem", marginTop: "10px", overflowWrap: "break-word", flexGrow: 1 }}>
-          <ReactMarkdown>
-            {retoActual.description || "Sin descripción"}
-          </ReactMarkdown>
+          <ReactMarkdown>{retoActual.description || "Sin descripción"}</ReactMarkdown>
         </div>
 
+        {/* RECUADRO DE RESULTADOS DE TESTS */}
         <div style={{ marginTop: "30px", flexShrink: 0 }}>
-            <div style={{ backgroundColor: "#1e1e1e", color: "#fff", borderRadius: "8px", padding: "20px", minHeight: "150px" }}>
-            <h4 style={{ margin: "0 0 10px 0", color: "#aaa", fontSize: "0.9rem", textTransform: "uppercase" }}>Resultado de las pruebas</h4>
-            <p style={{ color: "#aaa", fontFamily: "monospace" }}>Aún no has ejecutado tu código...</p>
+            <div style={{ 
+                backgroundColor: result?.status === 'success' ? '#143118' : (result?.status === 'error' ? '#3d1616' : '#1e1e1e'), 
+                color: "#fff", borderRadius: "8px", padding: "20px", minHeight: "150px", 
+                border: `1px solid ${result?.status === 'success' ? '#2e7d32' : (result?.status === 'error' ? '#c62828' : '#333')}`
+            }}>
+                <h4 style={{ margin: "0 0 10px 0", color: "#ddd", fontSize: "0.9rem", textTransform: "uppercase", fontWeight: "bold" }}>
+                    {result ? result.title : "Resultado de las pruebas"}
+                </h4>
+                
+                {!result ? (
+                    <p style={{ color: "#aaa", fontFamily: "monospace" }}>Aún no has ejecutado tu código...</p>
+                ) : (
+                    <>
+                        <p style={{ fontWeight: "bold", marginBottom: "10px", color: result.status === 'success' ? '#81c784' : '#ef5350' }}>
+                            {result.message}
+                        </p>
+                        {result.details && (
+                            <pre style={{ 
+                                backgroundColor: "rgba(0,0,0,0.5)", padding: "10px", borderRadius: "4px", 
+                                fontSize: "0.85rem", overflowX: "auto", fontFamily: "monospace", color: "#bbb" 
+                            }}>
+                                {result.details}
+                            </pre>
+                        )}
+                    </>
+                )}
             </div>
         </div>
       </div>
 
       {/* PANEL DERECHO (Editor) */}
-      <div style={{ 
-        display: "flex", 
-        flexDirection: "column", 
-        backgroundColor: "#1e1e1e", 
-        overflow: "hidden"
-      }}>
+      <div style={{ display: "flex", flexDirection: "column", backgroundColor: "#1e1e1e", overflow: "hidden" }}>
         
         <div style={{ height: "50px", backgroundColor: "#2d2d2d", borderBottom: "1px solid #111", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 20px", flexShrink: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: "15px" }}>
             <span style={{ color: "#aaa", fontSize: "0.9rem", fontWeight: "bold" }}>LENGUAJE:</span>
-            <select 
-              value={lenguaje}
-              onChange={cambiarLenguaje}
-              style={{ 
-                backgroundColor: "#1e1e1e", color: "white", border: "1px solid #444", 
-                padding: "5px 10px", borderRadius: "4px", fontSize: "0.9rem", outline: "none", cursor: "pointer" 
-              }}
-            >
+            <select value={lenguaje} onChange={cambiarLenguaje} style={{ backgroundColor: "#1e1e1e", color: "white", border: "1px solid #444", padding: "5px 10px", borderRadius: "4px", fontSize: "0.9rem", outline: "none", cursor: "pointer" }}>
               <option value="javascript">JavaScript</option>
               <option value="python">Python</option>
               <option value="java">Java</option>
@@ -198,22 +292,11 @@ export default function Entrenar() {
             {nombresArchivo[lenguaje]}
           </span>
         </div>
-
+	
         {/* 2. BLINDAJE DEL EDITOR */}
         <div style={{ flex: 1, position: "relative" }}> 
           <div style={{ position: "absolute", top: 0, bottom: 0, left: 0, right: 0, paddingTop: "10px" }}>
-            <Editor
-              height="100%"
-              language={lenguaje}
-              theme="vs-dark"
-              value={codigo}
-              onChange={(valor) => setCodigo(valor || "")}
-              options={{
-                minimap: { enabled: false }, 
-                fontSize: 16,
-                padding: { top: 15 }
-              }}
-            />
+            <Editor height="100%" language={lenguaje} theme="vs-dark" value={codigo} onChange={(valor) => setCodigo(valor || "")} options={{ minimap: { enabled: false }, fontSize: 16, padding: { top: 15 } }} />
           </div>
         </div>
 
@@ -221,16 +304,15 @@ export default function Entrenar() {
         <div style={{ height: "70px", backgroundColor: "#2d2d2d", borderTop: "1px solid #111", display: "flex", alignItems: "center", justifyContent: "flex-end", padding: "0 20px", flexShrink: 0 }}>
           <button 
             onClick={ejecutarCodigo}
+            disabled={submitting}
             style={{ 
-              display: "flex", alignItems: "center", backgroundColor: "#ff4b4b", color: "white", 
+              display: "flex", alignItems: "center", backgroundColor: submitting ? "#888" : "#ff4b4b", color: "white", 
               border: "none", padding: "12px 25px", borderRadius: "6px", fontSize: "1.1rem", 
-              fontWeight: "bold", cursor: "pointer", transition: "background-color 0.2s" 
+              fontWeight: "bold", cursor: submitting ? "not-allowed" : "pointer", transition: "background-color 0.2s" 
             }}
-            onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#d43f3f"}
-            onMouseOut={(e) => e.currentTarget.style.backgroundColor = "#ff4b4b"}
           >
             <Play size={20} style={{ marginRight: "10px" }} />
-            Ejecutar Código
+            {submitting ? "Evaluando..." : "Ejecutar Código"}
           </button>
         </div>
 
