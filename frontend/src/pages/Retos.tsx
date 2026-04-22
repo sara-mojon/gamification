@@ -53,6 +53,8 @@ export default function Retos() {
   const [etiquetaFiltro, setEtiquetaFiltro] = useState("Todas");
   const [tiempoFiltro, setTiempoFiltro] = useState("Todos");
   const [testFiltro, setTestFiltro] = useState("Todos");
+  const [visibilidadFiltro, setVisibilidadFiltro] = useState("Todos");
+  
   const [paginaActual, setPaginaActual] = useState(1);
 
   const [modalEliminar, setModalEliminar] = useState({ abierto: false, id: "", titulo: "" });
@@ -149,7 +151,6 @@ export default function Retos() {
   }, [token, auth.isLoading, baseUrlUsers, baseUrlChallenges]);
 
   const ejecutarImportar = async () => {
-    // --- Lógica si hay un archivo Excel seleccionado ---
     if (archivoExcel) {
       setModalImportar(false);
       setCargandoAccion(true);
@@ -205,7 +206,6 @@ export default function Retos() {
       return;
     }
 
-    // --- Si NO hay Excel, usamos las cajitas de texto ---
     const idsValidos = importIds.map(id => id.trim()).filter(id => id !== "");
     if (idsValidos.length === 0) return;
     
@@ -260,7 +260,6 @@ export default function Retos() {
       }
       mensajeFinal = mensajeFinal.trim();
 
-      // Evaluamos los resultados
       if (detallesErrores.length === 0) {
         setImportIds([""]); 
         setExitoAccion(true);
@@ -362,7 +361,6 @@ export default function Retos() {
         let nuevoColor = "#ff9800"; 
         let nuevoTiempo = 20;
         
-        // Usamos formData en lugar de payload para evitar los errores de TypeScript
         if (formData.rank >= 7) { nuevaDificultad = "Fácil"; nuevoColor = "#4caf50"; nuevoTiempo = 10; } 
         else if (formData.rank <= 4) { nuevaDificultad = "Difícil"; nuevoColor = "#ff4b4b"; nuevoTiempo = 45; }
 
@@ -376,7 +374,7 @@ export default function Retos() {
             colorDificultad: nuevoColor,
             tiempoEstimado: nuevoTiempo,
             isVisible: formData.isVisible,
-            etiquetas: tagsArray, // Usamos la variable tagsArray que creaste justo arriba
+            etiquetas: tagsArray,
             tests: payload.tests ? payload.tests : r.tests,
             tieneTests: payload.tests ? true : r.tieneTests
         } : r));
@@ -428,7 +426,7 @@ export default function Retos() {
       setRetos(retosActuales => 
         retosActuales.map(r => 
           r.id === retoId 
-            ? { ...r, tieneTests: true, tests: data.tests || r.tests } // Si el back te devuelve los tests, ponlos aquí
+            ? { ...r, tieneTests: true, tests: data.tests || r.tests }
             : r
         )
       );
@@ -473,6 +471,7 @@ export default function Retos() {
 
   const todasLasEtiquetas = Array.from(new Set(retos.flatMap(reto => reto.etiquetas)));
 
+  // --- LÓGICA DE FILTRADO ---
   const retosFiltrados = retos.filter((reto) => {
     if (!isAdmin && !reto.isVisible) return false;
 
@@ -486,12 +485,19 @@ export default function Retos() {
     if (tiempoFiltro === "mas30") coincideTiempo = reto.tiempoEstimado > 30;
 
     let coincideTests = true;
+    let coincideVisibilidad = true;
+    
     if (isAdmin) {
+      // Filtro de Tests
       if (testFiltro === "Con tests") coincideTests = reto.tieneTests;
       if (testFiltro === "Sin tests") coincideTests = !reto.tieneTests;
+      
+      // Filtro de Visibilidad 
+      if (visibilidadFiltro === "Públicos") coincideVisibilidad = reto.isVisible;
+      if (visibilidadFiltro === "Borradores") coincideVisibilidad = !reto.isVisible;
     }
 
-    return coincideTexto && coincideDificultad && coincideEtiqueta && coincideTiempo && coincideTests;
+    return coincideTexto && coincideDificultad && coincideEtiqueta && coincideTiempo && coincideTests && coincideVisibilidad;
   });
 
   const totalPaginas = Math.ceil(retosFiltrados.length / ITEMS_POR_PAGINA) || 1;
@@ -891,13 +897,20 @@ export default function Retos() {
             <option value="mas30">Más de 30 min</option>
           </select>
         </div>
-        {/* FILTRO DE TESTS (Solo visible para Admins) */}
+        
+        {/* FILTROS EXCLUSIVOS DE ADMIN (Tests y Visibilidad) */}
         {isAdmin && (
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
             <select value={testFiltro} onChange={(e) => { setTestFiltro(e.target.value); setPaginaActual(1); }} style={{ padding: "12px", borderRadius: "6px", border: "1px solid #ddd", fontSize: "1rem", outline: "none", cursor: "pointer", boxSizing: "border-box" }}>
               <option value="Todos">Estado de los tests</option>
               <option value="Sin tests">Sin tests generados</option>
               <option value="Con tests">Tests generados</option>
+            </select>
+
+            <select value={visibilidadFiltro} onChange={(e) => { setVisibilidadFiltro(e.target.value); setPaginaActual(1); }} style={{ padding: "12px", borderRadius: "6px", border: "1px solid #ddd", fontSize: "1rem", outline: "none", cursor: "pointer", boxSizing: "border-box" }}>
+              <option value="Todos">Estado de publicación</option>
+              <option value="Públicos">Públicos (Visibles)</option>
+              <option value="Borradores">Borradores (Ocultos)</option>
             </select>
           </div>
         )}
