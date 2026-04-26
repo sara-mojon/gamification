@@ -5,6 +5,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import org.slf4j.Logger;
@@ -70,33 +71,43 @@ public class UserService {
 
     public void updateUserStreak(User user) {
         LocalDate today = LocalDate.now();
+        DayOfWeek dayOfWeek = today.getDayOfWeek();
 
         if (user.getLastSolveDate() == null) {
             user.setCurrentStreak(1);
             user.setLastSolveDate(today);
-            log.info("🔥 El usuario {} ha iniciado su racha (1 día)", user.getUsername());
-
         } else {
             long daysBetween = ChronoUnit.DAYS.between(user.getLastSolveDate(), today);
-
+            boolean esConsecutivo = false;
             if (daysBetween == 1) {
+                // Caso normal: resolvió ayer
+                esConsecutivo = true;
+            } else if (dayOfWeek == DayOfWeek.MONDAY) {
+                // Si es lunes, aceptamos que el último fuera viernes (3 días), sábado (2) o
+                // domingo (1)
+                if (daysBetween <= 3)
+                    esConsecutivo = true;
+            }
+
+            if (esConsecutivo) {
                 user.setCurrentStreak(user.getCurrentStreak() + 1);
-                user.setLastSolveDate(today);
-                log.info("Racha aumentada: El usuario {} lleva {} días seguidos", user.getUsername(),
-                        user.getCurrentStreak());
-
+                log.info("🔥 Racha aumentada para {}: {} días", user.getUsername(), user.getCurrentStreak());
             } else if (daysBetween > 1) {
-                log.info("Racha perdida: El usuario {} perdió su racha de {} días. Vuelve a 1.", user.getUsername(),
-                        user.getCurrentStreak());
-                user.setCurrentStreak(1);
-                user.setLastSolveDate(today);
+                // Si es fin de semana (Sáb/Dom) y NO resuelve, no hacemos nada (la racha se
+                // congela)
+                if (dayOfWeek == DayOfWeek.SATURDAY || dayOfWeek == DayOfWeek.SUNDAY) {
+                    log.info("😴 Fin de semana para {}. Racha congelada.", user.getUsername());
+                    return;
+                }
 
+                log.info("Racha perdida para {}. Volviendo a 1.", user.getUsername());
+                user.setCurrentStreak(1);
             } else {
-                log.info("El usuario {} está en racha hoy. Racha mantenida en {} días.", user.getUsername(),
-                        user.getCurrentStreak());
+                log.info("{} ya ha resuelto hoy. Racha mantenida.", user.getUsername());
+                return;
             }
         }
-
+        user.setLastSolveDate(today);
         userRepository.save(user);
     }
 

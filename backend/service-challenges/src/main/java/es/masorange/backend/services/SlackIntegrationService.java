@@ -267,9 +267,9 @@ public class SlackIntegrationService {
     }
 
     // @Scheduled(cron = "0 */5 * * * *")
-    @Scheduled(cron = "0 30 8 * * 1-5")
-    public void dispararRetoCada48h() {
-        log.info("Despertando tarea programada CRON: dispararRetoCada48h");
+    @Scheduled(cron = "0 30 8 * * MON-FRI")
+    public void dispararRetoCadaDiaLaboral() {
+        log.info("Despertando tarea programada CRON: dispararRetoCadaDiaLaboral");
         Optional<Challenge> retoOpt = challengeRepository.findRandomChallenge();
 
         if (retoOpt.isPresent()) {
@@ -577,7 +577,7 @@ public class SlackIntegrationService {
     // SISTEMA DE RACHAS (STREAKS)
     // ==========================================
     // Se ejecuta todos los días a las 17:00
-    @Scheduled(cron = "0 0 15 * * *")
+    @Scheduled(cron = "0 0 15 * * MON-FRI")
     public void avisarRachasEnPeligro() {
         String USER_SERVICE_URL = "http://service-user:8080/api/users/streaks/at-risk";
         RestTemplate restTemplate = new RestTemplate();
