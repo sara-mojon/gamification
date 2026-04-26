@@ -342,12 +342,13 @@ export default function Retos() {
   };
 
   const ejecutarCrearPropuesta = async () => {
-    if (!crearFormData.name || !crearFormData.description) {
-      toast.error("El título y la descripción son obligatorios.");
+    if (!crearFormData.name || !crearFormData.description || !crearFormData.solucion) {
+      toast.error("El título, la descripción y la solución son obligatorios.");
       return;
     }
 
     setCargandoAccion(true);
+
     try {
       const tagsArray = crearFormData.tags.split(',').map(tag => tag.trim()).filter(tag => tag !== "");
 
@@ -357,7 +358,8 @@ export default function Retos() {
         rank: crearFormData.rank,
         tags: tagsArray,
         isVisible: false, 
-        tests: crearFormData.solucion ? { [crearFormData.lenguajeSolucion]: `// SOLUCIÓN PROPUESTA POR USUARIO:\n${crearFormData.solucion}` } : {}
+        tests: {}, 
+        solutions: { [crearFormData.lenguajeSolucion]: crearFormData.solucion }
       };
 
       const response = await fetch(`${baseUrlChallenges}/api/challenges/manual`, {
@@ -367,8 +369,9 @@ export default function Retos() {
       });
 
       setCargandoAccion(false);
+      const datos = await response.json();
 
-      if (response.ok) {
+      if (response.ok && datos.status === "200") {
         setModalCrear(false);
         setCrearFormData({ name: "", description: "", rank: 8, tags: "", solucion: "", lenguajeSolucion: "python" });
         toast.success("¡Reto propuesto con éxito! Un administrador lo revisará pronto.", { duration: 5000 });
@@ -376,11 +379,12 @@ export default function Retos() {
           setTimeout(() => { window.location.reload(); }, 1500); 
         }
       } else {
-        setModalAviso({ abierto: true, titulo: "Error", mensaje: "El servidor rechazó la propuesta.", recargar: false });
+        const msgError = datos.message || "Ya existe un reto con este título.";
+        setModalAviso({ abierto: true, titulo: "No se pudo crear", mensaje: msgError, recargar: false });
       }
     } catch {
       setCargandoAccion(false);
-      setModalAviso({ abierto: true, titulo: "Error", mensaje: "Error de conexión al intentar crear el reto.", recargar: false });
+      setModalAviso({ abierto: true, titulo: "Error", mensaje: "Fallo de conexión.", recargar: false });
     }
   };
 
@@ -472,7 +476,7 @@ export default function Retos() {
       {/* ---------------- MINI MODALES ---------------- */}
       
       {cargandoAccion && (
-        <div style={overlayStyle}>
+        <div style={{ ...overlayStyle, zIndex: 1050 }}>
           <div style={miniModalStyle}>
             <style>{`@keyframes spin { 100% { transform: rotate(360deg); } } .ruleta { animation: spin 1s linear infinite; color: #1e1e1e; }`}</style>
             <Loader2 size={48} className="ruleta" style={{ marginBottom: "15px" }} />
@@ -482,7 +486,7 @@ export default function Retos() {
       )}
 
       {exitoAccion && (
-        <div style={overlayStyle}>
+        <div style={{ ...overlayStyle, zIndex: 1050 }}>
           <div style={miniModalStyle}>
             <CheckCircle2 size={56} color="#4caf50" style={{ marginBottom: "15px" }} />
             <h3 style={{ margin: 0, color: "#4caf50", fontSize: "1.2rem" }}>¡Completado!</h3>
@@ -491,7 +495,7 @@ export default function Retos() {
       )}
 
       {modalAviso.abierto && (
-        <div style={overlayStyle}>
+        <div style={{ ...overlayStyle, zIndex: 1050 }}>
           <div style={modalStyle}>
             <button style={btnCerrarStyle} onClick={() => { if (modalAviso.recargar) window.location.reload(); setModalAviso({ abierto: false, titulo: "", mensaje: "", recargar: false }); }}><X size={24} /></button>
             <h2 style={{ marginTop: 0, color: "#d32f2f", display: "flex", alignItems: "center", gap: "10px" }}><AlertTriangle size={24}/> {modalAviso.titulo}</h2>

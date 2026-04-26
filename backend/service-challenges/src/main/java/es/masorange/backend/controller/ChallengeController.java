@@ -15,12 +15,10 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
-import org.springframework.web.reactive.function.client.WebClient;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import org.slf4j.LoggerFactory;
 import org.slf4j.Logger;
 
 import es.masorange.backend.model.BasicResponseDTO;
@@ -62,6 +60,19 @@ public class ChallengeController {
     @PostMapping("/generate/test/{id}")
     public BasicResponseDTO generateTestForChallenge(@PathVariable Long id) {
         return challengeService.generateTestsWithAI(id);
+    }
+
+    @PostMapping("/manual")
+    public ResponseEntity<BasicResponseDTO> createManualChallenge(@RequestBody Challenge dto) {
+        BasicResponseDTO response = challengeService.createManualChallenge(dto);
+
+        if ("200".equals(response.status())) {
+            return ResponseEntity.ok(response);
+        } else if ("409".equals(response.status())) {
+            return ResponseEntity.status(org.springframework.http.HttpStatus.CONFLICT).body(response);
+        } else {
+            return ResponseEntity.badRequest().body(response);
+        }
     }
 
     @GetMapping

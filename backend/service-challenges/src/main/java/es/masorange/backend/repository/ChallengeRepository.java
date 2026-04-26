@@ -16,4 +16,6 @@ public interface ChallengeRepository extends JpaRepository<Challenge, Long> {
 
     Optional<Challenge> findByIdCodeWars(String idCodeWars);
 
+    boolean existsByNameIgnoreCase(String name);
+
 }

@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -321,6 +322,39 @@ public class ChallengeService {
 
         log.info("Flujo de generación de tests con IA finalizado para el challenge ID: {}", id);
         return new BasicResponseDTO("Tests generados correctamente.", "200");
+    }
+
+    public BasicResponseDTO createManualChallenge(Challenge challengeDto) {
+        log.info("Recibida propuesta de reto manual: {}", challengeDto.getName());
+        try {
+            if (challengeDto.getName() == null || challengeDto.getName().trim().isEmpty()) {
+                return new BasicResponseDTO("El título del reto es obligatorio.", "400");
+            }
+            if (challengeDto.getDescription() == null || challengeDto.getDescription().trim().isEmpty()) {
+                return new BasicResponseDTO("La descripción del reto es obligatoria.", "400");
+            }
+            if (challengeRepository.existsByNameIgnoreCase(challengeDto.getName().trim())) {
+                return new BasicResponseDTO("Ya existe un reto con este título. Por favor, elige un nombre diferente.",
+                        "409");
+            }
+
+            String fakeCodeWarsId = "MANUAL-" + UUID.randomUUID().toString().substring(0, 8);
+            challengeDto.setIdCodeWars(fakeCodeWarsId);
+            String slug = challengeDto.getName().toLowerCase()
+                    .replaceAll("[^a-z0-9\\s-]", "")
+                    .replaceAll("\\s+", "-");
+            slug = slug + "-" + UUID.randomUUID().toString().substring(0, 4);
+            challengeDto.setSlug(slug);
+            challengeDto.setIsVisible(false);
+
+            challengeRepository.save(challengeDto);
+            log.info("Reto manual guardado con éxito. Slug: {}", slug);
+            return new BasicResponseDTO("Reto creado correctamente y pendiente de revisión.", "200");
+
+        } catch (Exception e) {
+            log.error("Error al guardar el reto manual: {}", e.getMessage());
+            return new BasicResponseDTO("Error interno del servidor al guardar el reto.", "500");
+        }
     }
 
     private String callOllamaToGenerateTest(Challenge challenge, String language) {

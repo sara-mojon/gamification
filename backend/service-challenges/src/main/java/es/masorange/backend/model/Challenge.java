@@ -67,4 +67,10 @@ public class Challenge {
     @Column(name = "template_code")
     private Map<String, String> templates = new HashMap<>();
 
+    @ElementCollection
+    @CollectionTable(name = "challenge_solutions", joinColumns = @JoinColumn(name = "challenge_id"))
+    @MapKeyColumn(name = "language")
+    @Column(name = "solution_code", columnDefinition = "TEXT")
+    private Map<String, String> solutions = new HashMap<>();
+
 }
