@@ -15,10 +15,17 @@ import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import org.springframework.http.ResponseEntity;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
 
 import es.masorange.backend.model.Challenge;
 import es.masorange.backend.repository.ChallengeRepository;
@@ -40,6 +47,8 @@ public class SlackIntegrationService {
     @Value("${frontend.url:http://localhost:5173}")
     private String frontendUrl;
 
+    private List<String> ultimoPodioConocido = new java.util.ArrayList<>();
+
     private final ChallengeRepository challengeRepository;
 
     public SlackIntegrationService(ChallengeRepository challengeRepository) {
@@ -50,6 +59,8 @@ public class SlackIntegrationService {
     // PROCESAMIENTO DE COMANDOS
     // ==========================================
     public Map<String, Object> processCommand(String command, String userName, String userId, String text) {
+        notificarVinculacionAServiceUser(userName, userId);
+
         log.info("Comando recibido: {} ejecutado por @{}", command, userName);
         Map<String, Object> response = new HashMap<>();
 
@@ -61,7 +72,6 @@ public class SlackIntegrationService {
                     Challenge reto = retoOpt.get();
                     String urlReto = frontendUrl + "/entrenar/" + reto.getId();
 
-                    // Ahora usamos nuestra función mejorada para limpiar la descripción
                     String descLimpia = limpiarDescripcionParaSlack(reto.getDescription());
 
                     String mensajeReto = "¡Hola <@" + userId + ">! Aquí tienes un reto para hoy:\n\n" +
@@ -176,7 +186,7 @@ public class SlackIntegrationService {
                         "El desarrollador <@" + userId + "> ha lanzado un desafío a " + oponenteParaMensaje + ".\n" +
                         "La afrenta es pública. ¡Que gane el mejor código!";
 
-                this.enviarMensajeASlack(idOponente, mensajePrivadoOponente);
+                this.enviarMensajeDueloConBotones(idOponente, userId);
 
                 response.put("response_type", "in_channel");
                 response.put("text", mensajeDueloPublico);
@@ -196,7 +206,7 @@ public class SlackIntegrationService {
                         +
                         "*¿Cómo funciona?*\n" +
                         "1. Usa el comando `/challenge` para recibir un reto aleatorio.\n" +
-                        "2. Resuélvelo en nuestro frontend y gana puntos.\n" +
+                        "2. Resuélvelo en la app y gana puntos.\n" +
                         "3. Consulta tu posición en el ranking con `/rank`.\n" +
                         "4. Desafía a tus amigos con `/duel @usuario`.\n\n" +
                         "💡 *Consejo:* Cuantos más retos resuelvas, más subirás en la clasificación.");
@@ -256,7 +266,8 @@ public class SlackIntegrationService {
         }
     }
 
-    @Scheduled(cron = "0 0 10 */1 * *")
+    // @Scheduled(cron = "0 */5 * * * *")
+    @Scheduled(cron = "0 30 8 * * 1-5")
     public void dispararRetoCada48h() {
         log.info("Despertando tarea programada CRON: dispararRetoCada48h");
         Optional<Challenge> retoOpt = challengeRepository.findRandomChallenge();
@@ -280,8 +291,129 @@ public class SlackIntegrationService {
         }
     }
 
+    // ==========================================
+    // ENVÍO DE MENSAJES A SLACK
+    // ==========================================
+
+    /**
+     * Envía un mensaje directo a un usuario abriendo primero el canal de DM.
+     */
+    @SuppressWarnings("unchecked")
+    private void enviarMensajeDirecto(String userId, String mensaje) {
+        log.info("Abriendo canal de Mensaje Directo para el usuario: {}", userId);
+        RestTemplate restTemplate = new RestTemplate();
+        String urlOpen = "https://slack.com/api/conversations.open";
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.setBearerAuth(slackBotToken);
+
+        Map<String, String> body = new HashMap<>();
+        body.put("users", userId);
+
+        HttpEntity<Map<String, String>> request = new HttpEntity<>(body, headers);
+
+        try {
+            ResponseEntity<Map> response = restTemplate.postForEntity(urlOpen, request, Map.class);
+            Map<String, Object> respBody = response.getBody();
+
+            if (respBody != null && Boolean.TRUE.equals(respBody.get("ok"))) {
+                Map<String, Object> channelData = (Map<String, Object>) respBody.get("channel");
+                String channelId = (String) channelData.get("id");
+
+                log.info("Canal de DM abierto con ID: {}. Enviando mensaje...", channelId);
+                // Reutilizamos la función base para enviar el texto al canal recién descubierto
+                enviarMensajeASlack(channelId, mensaje);
+            } else {
+                log.error("Error al abrir canal de DM con {}: {}", userId, respBody);
+            }
+        } catch (Exception e) {
+            log.error("Excepción al intentar abrir DM con {}: {}", userId, e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Envía un mensaje directo con botones interactivos usando Slack Block Kit
+     */
+    @SuppressWarnings("unchecked")
+    private void enviarMensajeDueloConBotones(String idOponente, String idRetador) {
+        log.info("Abriendo canal de DM para enviar duelo interactivo a: {}", idOponente);
+        RestTemplate restTemplate = new RestTemplate();
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.setBearerAuth(slackBotToken);
+
+        // 1. Abrir DM
+        Map<String, String> openBody = new HashMap<>();
+        openBody.put("users", idOponente);
+        HttpEntity<Map<String, String>> openRequest = new HttpEntity<>(openBody, headers);
+
+        try {
+            ResponseEntity<Map> response = restTemplate.postForEntity("https://slack.com/api/conversations.open",
+                    openRequest, Map.class);
+            Map<String, Object> respBody = response.getBody();
+
+            if (respBody != null && Boolean.TRUE.equals(respBody.get("ok"))) {
+                Map<String, Object> channelData = (Map<String, Object>) respBody.get("channel");
+                String channelId = (String) channelData.get("id");
+
+                // 2. Construir el mensaje con Block Kit (Botones)
+                Map<String, Object> msgBody = new HashMap<>();
+                msgBody.put("channel", channelId);
+                msgBody.put("text", "¡Has sido desafiado a un duelo!");
+
+                Map<String, Object> textSection = new HashMap<>();
+                textSection.put("type", "section");
+                Map<String, String> textContent = new HashMap<>();
+                textContent.put("type", "mrkdwn");
+                textContent.put("text", "⚔️ *¡HAS SIDO DESAFIADO!* ⚔️\nEl usuario <@" + idRetador
+                        + "> te ha retado a un duelo de código.\n¿Aceptas el reto? Prepárate ...");
+                textSection.put("text", textContent);
+
+                // Bloque 2: Los botones
+                Map<String, Object> actionSection = new HashMap<>();
+                actionSection.put("type", "actions");
+
+                // Botón Aceptar
+                Map<String, Object> btnAceptar = new HashMap<>();
+                btnAceptar.put("type", "button");
+                btnAceptar.put("style", "primary"); // Color verde
+                btnAceptar.put("value", "aceptar_duelo_" + idRetador);
+                Map<String, String> btnAceptarText = new HashMap<>();
+                btnAceptarText.put("type", "plain_text");
+                btnAceptarText.put("text", "¡Acepto el reto!");
+                btnAceptar.put("text", btnAceptarText);
+
+                // Botón Rechazar
+                Map<String, Object> btnRechazar = new HashMap<>();
+                btnRechazar.put("type", "button");
+                btnRechazar.put("style", "danger"); // Color rojo
+                btnRechazar.put("value", "rechazar_duelo_" + idRetador);
+                Map<String, String> btnRechazarText = new HashMap<>();
+                btnRechazarText.put("type", "plain_text");
+                btnRechazarText.put("text", "No me atrevo");
+                btnRechazar.put("text", btnRechazarText);
+
+                actionSection.put("elements", List.of(btnAceptar, btnRechazar));
+                msgBody.put("blocks", List.of(textSection, actionSection));
+
+                HttpEntity<Map<String, Object>> msgRequest = new HttpEntity<>(msgBody, headers);
+                restTemplate.postForEntity("https://slack.com/api/chat.postMessage", msgRequest, String.class);
+
+                log.info("Duelo interactivo enviado a {}", idOponente);
+            }
+        } catch (Exception e) {
+            log.error("Error enviando duelo interactivo: {}", e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Envía un mensaje a un ID de canal ya conocido (público, privado o DM
+     * abierto).
+     */
     public void enviarMensajeASlack(String canalOIdUsuario, String texto) {
-        log.info("Preparando envío de mensaje a Slack al canal/usuario: {}", canalOIdUsuario);
+        log.info("Preparando envío de mensaje a Slack al canal/ID: {}", canalOIdUsuario);
         RestTemplate restTemplate = new RestTemplate();
         String url = "https://slack.com/api/chat.postMessage";
 
@@ -304,6 +436,203 @@ public class SlackIntegrationService {
     }
 
     // ==========================================
+    // PROCESAMIENTO DE INTERACCIONES (BOTONES)
+    // ==========================================
+    public void processInteraction(String payloadJson) {
+        try {
+            ObjectMapper mapper = new ObjectMapper();
+            JsonNode payload = mapper.readTree(payloadJson);
+
+            // Verificamos que sea una acción de pulsar un botón
+            if (payload.has("type") && "block_actions".equals(payload.get("type").asText())) {
+
+                JsonNode action = payload.get("actions").get(0);
+                String actionValue = action.get("value").asText();
+                String userIdClic = payload.get("user").get("id").asText();
+                String responseUrl = payload.get("response_url").asText();
+
+                String mensajeParaDesafiado = "";
+
+                // Si hizo clic en ACEPTAR
+                if (actionValue.startsWith("aceptar_duelo_")) {
+                    String idRetador = actionValue.replace("aceptar_duelo_", "");
+                    log.info("El usuario {} ha aceptado el duelo de {}", userIdClic, idRetador);
+
+                    String mensajeArena = "⚔️ *¡EL DUELO HA SIDO ACEPTADO!* ⚔️\n" +
+                            "<@" + userIdClic + "> ha aceptado el reto de <@" + idRetador + ">.\n" +
+                            "¡Que empiece la batalla de código!";
+                    this.enviarMensajeASlack(this.canalId, mensajeArena);
+
+                    Optional<Challenge> retoOpt = challengeRepository.findRandomChallenge();
+                    // En el futuro cambiamos esto por un método específico que busque retos no
+                    // resueltos por ninguno de los dos usuarios, para evitar repetir retos ya
+                    // conocidos
+                    // challengeRepository.findRandomUnsolvedChallengeForUsers(idRetador,
+                    // userIdClic)
+                    String infoRetoCompartido;
+
+                    if (retoOpt.isPresent()) {
+                        Challenge reto = retoOpt.get();
+                        String urlReto = frontendUrl + "/entrenar/" + reto.getId();
+                        String descLimpia = limpiarDescripcionParaSlack(reto.getDescription());
+
+                        infoRetoCompartido = "🚀 *" + reto.getName() + "* (" + reto.getRank() + ")\n" +
+                                "📝 " + descLimpia + "\n\n" +
+                                "💻 *Resuélvelo aquí:* " + urlReto + "\n\n" +
+                                "¡El primero en validar la solución gana!";
+                    } else {
+                        infoRetoCompartido = "⚠️ Vaya, no retos disponibles ahora mismo.";
+                    }
+
+                    String mensajeParaRetador = "🔥 *¡<@" + userIdClic + "> ha aceptado tu duelo!* 🔥\n\n" +
+                            "Este es el reto seleccionado:\n\n" + infoRetoCompartido;
+                    this.enviarMensajeDirecto(idRetador, mensajeParaRetador);
+
+                    mensajeParaDesafiado = "✅ *¡Has aceptado el reto de <@" + idRetador + ">!*\n\n" +
+                            "Este es vuestro reto:\n\n" + infoRetoCompartido;
+                }
+                // Si hizo clic en RECHAZAR
+                else if (actionValue.startsWith("rechazar_duelo_")) {
+                    String idRetador = actionValue.replace("rechazar_duelo_", "");
+                    log.info("El usuario {} ha rechazado el duelo de {}", userIdClic, idRetador);
+
+                    String mensajeCobarde = "🏳️ *Duelo Cancelado* 🏳️\n" +
+                            "<@" + userIdClic + "> no ha reunido el valor para enfrentarse a <@" + idRetador + ">.";
+                    this.enviarMensajeASlack(this.canalId, mensajeCobarde);
+
+                    mensajeParaDesafiado = "🏃‍♂️ *Has rechazado el duelo.* Retirada...";
+                }
+
+                // MAGIA: Actualizamos el mensaje original (borra botones y pone el texto/reto)
+                if (!mensajeParaDesafiado.isEmpty()) {
+                    RestTemplate restTemplate = new RestTemplate();
+                    Map<String, Object> updateBody = new HashMap<>();
+                    updateBody.put("replace_original", true);
+                    updateBody.put("text", mensajeParaDesafiado);
+
+                    restTemplate.postForEntity(responseUrl, updateBody, String.class);
+                    log.info("Mensaje original actualizado (botones eliminados).");
+                }
+            }
+        } catch (Exception e) {
+            log.error("Error parseando el JSON de la interacción de Slack: {}", e.getMessage(), e);
+        }
+    }
+
+    // ==========================================
+    // SORPASSOS
+    // ==========================================
+    public void comprobarSorpassoPodio() {
+        String USER_SERVICE_URL = "http://service-user:8080/api/users/ranking/top3";
+        RestTemplate restTemplate = new RestTemplate();
+
+        try {
+            ResponseEntity<List<Map<String, Object>>> response = restTemplate.exchange(
+                    USER_SERVICE_URL,
+                    org.springframework.http.HttpMethod.GET,
+                    null,
+                    new org.springframework.core.ParameterizedTypeReference<List<Map<String, Object>>>() {
+                    });
+
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                List<Map<String, Object>> top3Actual = response.getBody();
+
+                List<String> podioActualNombres = new java.util.ArrayList<>();
+                for (Map<String, Object> user : top3Actual) {
+                    podioActualNombres.add((String) user.get("username"));
+                }
+
+                if (ultimoPodioConocido.isEmpty()) {
+                    ultimoPodioConocido = podioActualNombres;
+                    return;
+                }
+
+                // Si los nombres o el orden han cambiado... ¡HAY SORPASSO!
+                if (!ultimoPodioConocido.equals(podioActualNombres)) {
+                    log.info("¡Sorpasso detectado en el Top 3! Anterior: {}, Nuevo: {}", ultimoPodioConocido,
+                            podioActualNombres);
+
+                    StringBuilder mensajeSorpasso = new StringBuilder("🚨 *CAMBIOS EN EL PODIO!* 🚨\n");
+                    mensajeSorpasso.append("¡La clasificación ha cambiado en lo más alto de la tabla!\n\n");
+
+                    String[] medallas = { "🥇", "🥈", "🥉" };
+                    for (int i = 0; i < top3Actual.size(); i++) {
+                        Map<String, Object> u = top3Actual.get(i);
+                        mensajeSorpasso.append(medallas[i])
+                                .append(" *<@").append(u.get("username")).append(">* con ")
+                                .append(u.get("score")).append(" px\n");
+                    }
+
+                    mensajeSorpasso.append("\n_¿Quién será el siguiente en dar la campanada?_ 👀");
+                    this.enviarMensajeASlack(this.canalId, mensajeSorpasso.toString());
+                    ultimoPodioConocido = podioActualNombres;
+                }
+            }
+        } catch (Exception e) {
+            log.error("Error al comprobar sorpassos en el podio: {}", e.getMessage());
+        }
+    }
+
+    // ==========================================
+    // SISTEMA DE RACHAS (STREAKS)
+    // ==========================================
+    // Se ejecuta todos los días a las 17:00
+    @Scheduled(cron = "0 0 15 * * *")
+    public void avisarRachasEnPeligro() {
+        String USER_SERVICE_URL = "http://service-user:8080/api/users/streaks/at-risk";
+        RestTemplate restTemplate = new RestTemplate();
+
+        try {
+            ResponseEntity<List<Map<String, Object>>> response = restTemplate.exchange(
+                    USER_SERVICE_URL,
+                    HttpMethod.GET,
+                    null,
+                    new ParameterizedTypeReference<List<Map<String, Object>>>() {
+                    });
+
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                for (Map<String, Object> user : response.getBody()) {
+                    String slackId = (String) user.get("slackId");
+                    Integer racha = (Integer) user.get("currentStreak");
+
+                    String mensaje = "🔥 *¡No pierdas tu racha!* 🔥\n\n" +
+                            "Llevas " + racha + " días practicando.\n"
+                            + "No dejes que tu esfuerzo se pierda. ¡Sigue acumulando puntos y subiendo en el ranking! \n"
+                            + "👉 *Entra ahora a resolver un nuevo reto:* " + frontendUrl;
+
+                    this.enviarMensajeDirecto(slackId, mensaje);
+                }
+            }
+        } catch (Exception e) {
+            log.error("Error en el sistema de rachas: {}", e.getMessage());
+        }
+    }
+
+    // ==========================================
+    // COMUNICACIÓN ENTRE MICROSERVICIOS
+    // ==========================================
+    private void notificarVinculacionAServiceUser(String userName, String slackId) {
+        String USER_SERVICE_URL = "http://service-user:8080/api/users/link-slack";
+        RestTemplate restTemplate = new RestTemplate();
+
+        try {
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(org.springframework.http.MediaType.APPLICATION_JSON);
+
+            java.util.Map<String, String> body = new java.util.HashMap<>();
+            body.put("username", userName);
+            body.put("slackId", slackId);
+
+            HttpEntity<java.util.Map<String, String>> request = new HttpEntity<>(body, headers);
+
+            restTemplate.postForEntity(USER_SERVICE_URL, request, Void.class);
+
+        } catch (Exception e) {
+            log.warn("No se pudo notificar la vinculación de Slack para {}: {}", userName, e.getMessage());
+        }
+    }
+
+    // ==========================================
     // PARSER DE MARKDOWN PARA SLACK
     // ==========================================
     private String limpiarDescripcionParaSlack(String descripcionBruta) {
@@ -313,14 +642,15 @@ public class SlackIntegrationService {
 
         String limpia = descripcionBruta;
 
-        limpia = limpia.replaceAll("~~~if(-not)?:[a-zA-Z0-9_-]+\\n?", "");
+        limpia = limpia.replaceAll("~~~if(-not)?:[a-zA-Z0-9_,\\s-]+\\n?", "");
         limpia = limpia.replace("~~~", "```");
-        limpia = limpia.replace("<br>", "\n").replace("<p>", "").replace("</p>", "\n");
+        limpia = limpia.replaceAll("</?br\\s*/?>", "\n").replace("<p>", "").replace("</p>", "\n");
         limpia = limpia.replaceAll("(?m)^#{1,6}\\s+(.+)$", "*$1*");
         limpia = limpia.replaceAll("\\*\\*(.*?)\\*\\*", "*$1*");
         limpia = limpia.replaceAll("`\\s*\\${1,2}\\s*([^`$]+?)\\s*\\${1,2}\\s*`", "`$1`");
         limpia = limpia.replaceAll("\\${1,2}\\s*([^$]+?)\\s*\\${1,2}", "`$1`");
         limpia = limpia.replaceAll("\\[([^\\]]+)\\]\\(([^\\)]+)\\)", "<$2|$1>");
+
         if (limpia.length() > 600) {
             limpia = limpia.substring(0, 600)
                     + "...\n_*(Sigue leyendo en la plataforma para ver los ejemplos completos)*_";

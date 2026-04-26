@@ -26,6 +26,9 @@ public class SecurityConfig {
                                                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                                                 .requestMatchers("/api/slack/**").permitAll()
                                                 .requestMatchers("/api/users/ranking/**").permitAll()
+                                                .requestMatchers(HttpMethod.POST, "/api/users/link-slack").permitAll()
+                                                .requestMatchers(HttpMethod.GET, "/api/users/streaks/at-risk")
+                                                .permitAll()
                                                 .anyRequest().authenticated())
                                 .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()))
                                 .sessionManagement(session -> session
@@ -39,8 +42,8 @@ public class SecurityConfig {
                 configuration.setAllowedOrigins(Arrays.asList(
                                 "http://localhost:5173",
                                 "https://frontend.sara.local",
-                                "http://frontend.sara.local",
-                                "https://app.saramg.org"));
+                                "https://app.saramg.org",
+                                "https://api.saramg.org"));
                 configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
                 configuration.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type", "Accept"));
                 configuration.setAllowCredentials(true);

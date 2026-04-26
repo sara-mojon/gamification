@@ -1,6 +1,9 @@
 package es.masorange.backend.services;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
@@ -71,7 +74,7 @@ public class UserService {
         if (user.getLastSolveDate() == null) {
             user.setCurrentStreak(1);
             user.setLastSolveDate(today);
-            log.info("🔥 Primera sangre: El usuario {} ha iniciado su racha (1 día)", user.getUsername());
+            log.info("🔥 El usuario {} ha iniciado su racha (1 día)", user.getUsername());
 
         } else {
             long daysBetween = ChronoUnit.DAYS.between(user.getLastSolveDate(), today);
@@ -184,5 +187,31 @@ public class UserService {
         response.put("position", posicion);
 
         return Optional.of(response);
+    }
+
+    public List<Map<String, Object>> getUsersWithStreakAtRisk() {
+        LocalDate today = LocalDate.now();
+        List<User> usersAtRisk = userRepository.findByCurrentStreakGreaterThanAndLastSolveDateBefore(0, today);
+
+        List<Map<String, Object>> responseList = new ArrayList<>();
+        for (User user : usersAtRisk) {
+            if (user.getSlackId() != null) { // Solo avisamos si tenemos su ID de Slack
+                Map<String, Object> info = new HashMap<>();
+                info.put("slackId", user.getSlackId());
+                info.put("currentStreak", user.getCurrentStreak());
+                responseList.add(info);
+            }
+        }
+        return responseList;
+    }
+
+    public void vincularSlackSiEsNecesario(String username, String slackId) {
+        userRepository.findByUsername(username).ifPresent(user -> {
+            if (user.getSlackId() == null || !user.getSlackId().equals(slackId)) {
+                user.setSlackId(slackId);
+                userRepository.save(user);
+                log.info("Usuario {} vinculado con Slack ID: {}", username, slackId);
+            }
+        });
     }
 }

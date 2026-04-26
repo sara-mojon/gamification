@@ -38,4 +38,7 @@ public class User {
     @Column(name = "last_solve_date")
     private LocalDate lastSolveDate;
 
+    @Column(name = "slack_id")
+    private String slackId;
+
 }

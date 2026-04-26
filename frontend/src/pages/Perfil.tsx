@@ -46,9 +46,24 @@ export default function Perfil() {
       if (!token) return;
 
       try {
+        // 1. Pedimos los datos básicos del usuario
         const response = await fetch(`${baseUrl}/api/users/me`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
+
+        // 2. Pedimos su posición en el ranking
+        let posicionRanking: number | string = "-";
+        try {
+          const rankResponse = await fetch(`${baseUrl}/api/users/ranking/${username}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          if (rankResponse.ok) {
+            const rankData = await rankResponse.json();
+            posicionRanking = rankData.position;
+          }
+        } catch (error) {
+          console.error("No se pudo obtener el ranking", error);
+        }
 
         if (response.ok) {
           const misDatos = await response.json();
@@ -58,7 +73,7 @@ export default function Perfil() {
             puntos: misDatos.score || 0,
             retosCompletados: misDatos.retosCompletados || 0,
             rachaDias: misDatos.currentStreak || 0,
-            rangoGlobal: "-" 
+            rangoGlobal: posicionRanking
           });
 
           if (misDatos.preferredLanguage) { 
@@ -73,7 +88,7 @@ export default function Perfil() {
     };
 
     cargarMiPerfil();
-  }, [token, baseUrl]);
+  }, [token, baseUrl, username]);
 
   const cambiarLenguaje = async (e: React.ChangeEvent<HTMLSelectElement>) => {
     const nuevoLenguaje = e.target.value;
@@ -171,7 +186,7 @@ export default function Perfil() {
               
               <div style={{ marginTop: "25px", padding: "10px", backgroundColor: "#f9f9f9", borderRadius: "8px", display: "inline-block", border: "1px solid #eee" }}>
                 <span style={{ color: "#555", fontSize: "0.9rem", fontWeight: "bold" }}>Rango Actual:</span>
-                <span style={{ marginLeft: "10px", color: "#ff4b4b", fontWeight: "bold", fontSize: "1.1rem" }}># {estadisticas.rangoGlobal} del mundo</span>
+                <span style={{ marginLeft: "10px", color: "#ff4b4b", fontWeight: "bold", fontSize: "1.1rem" }}> {estadisticas.rangoGlobal} </span>
               </div>
             </div>
 
@@ -191,7 +206,7 @@ export default function Perfil() {
                 
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <div style={{ display: "flex", alignItems: "center", color: "#555" }}><Activity size={18} style={{ marginRight: "10px", color: "#ff9800" }} /> Racha de días</div>
-                  <strong style={{ fontSize: "1.2rem", color: "#1e1e1e" }}>{estadisticas.rachaDias} 🔥</strong>
+                  <strong style={{ fontSize: "1.2rem", color: "#1e1e1e" }}>{estadisticas.rachaDias}</strong>
                 </div>
               </div>
             </div>
@@ -296,7 +311,7 @@ export default function Perfil() {
           position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
           backgroundColor: "rgba(0, 0, 0, 0.6)", zIndex: 1000,
           display: "flex", justifyContent: "center", alignItems: "center",
-          backdropFilter: "blur(4px)" // Efecto cristal opcional
+          backdropFilter: "blur(4px)"
         }}>
           <div style={{
             backgroundColor: "white", padding: "40px", borderRadius: "12px",

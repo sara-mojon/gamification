@@ -156,6 +156,10 @@ public class ChallengeController {
                     // solutionRepository.save(new Solution(userId, id));
                     // }
 
+                    // TODO: 4. Revisar si hay sorpassos en el Top 3 de este reto y avisar por Slack
+                    // si es así
+                    // slackIntegrationService.comprobarSorpassoPodio();
+
                     log.info("🏆 El usuario ha superado el reto {} con éxito.", id);
                 }
             }

@@ -77,4 +77,21 @@ public class UserController {
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
+
+    @GetMapping("/streaks/at-risk")
+    public ResponseEntity<List<java.util.Map<String, Object>>> getStreaksAtRisk() {
+        return ResponseEntity.ok(userService.getUsersWithStreakAtRisk());
+    }
+
+    @PostMapping("/link-slack")
+    public ResponseEntity<Void> linkSlackUser(@RequestBody java.util.Map<String, String> payload) {
+        String username = payload.get("username");
+        String slackId = payload.get("slackId");
+
+        if (username != null && slackId != null) {
+            userService.vincularSlackSiEsNecesario(username, slackId);
+        }
+
+        return ResponseEntity.ok().build();
+    }
 }

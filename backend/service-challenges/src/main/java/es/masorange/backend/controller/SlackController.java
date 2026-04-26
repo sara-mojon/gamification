@@ -5,6 +5,7 @@ import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
+import org.springframework.util.MultiValueMap;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -80,4 +81,25 @@ public class SlackController {
 
         return slackService.processCommand(command, userName, userId, text);
     }
+
+    // ==========================================================
+    // 3. INTERACCIONES DE SLACK
+    // ==========================================================
+    @PostMapping(value = "/interactions", consumes = MediaType.APPLICATION_FORM_URLENCODED_VALUE)
+    public ResponseEntity<String> handleSlackInteractions(@RequestParam MultiValueMap<String, String> body) {
+        try {
+            // Extraemos el JSON que viene escondido en el formulario
+            String payloadJson = body.getFirst("payload");
+
+            if (payloadJson != null) {
+                slackService.processInteraction(payloadJson);
+            }
+
+            return ResponseEntity.ok().build();
+
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body("Error procesando interacción");
+        }
+    }
+
 }

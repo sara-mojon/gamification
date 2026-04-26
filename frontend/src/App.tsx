@@ -11,7 +11,7 @@ function App() {
   const auth = useAuth();
 
   if (auth.isLoading) {
-    return <div style={{ padding: "2rem", textAlign: "center", fontFamily: "sans-serif" }}>Cargando la matriz...</div>;
+    return null;
   }
 
   if (auth.error) {
