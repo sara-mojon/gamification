@@ -178,12 +178,8 @@ public class SlackIntegrationService {
                     break;
                 }
 
-                String mensajePrivadoOponente = "⚔️ *¡HAS SIDO DESAFIADO!* ⚔️\n" +
-                        "El usuario <@" + userId + "> te ha retado a un duelo de código.\n" +
-                        "¿Aceptas el reto? Prepara tu teclado...";
-
-                String mensajeDueloPublico = "🔥 *¡NUEVO DESAFÍO EN LA ARENA!* 🔥\n\n" +
-                        "El desarrollador <@" + userId + "> ha lanzado un desafío a " + oponenteParaMensaje + ".\n" +
+                String mensajeDueloPublico = "🔥 *¡NUEVO DESAFÍO!* 🔥\n\n" +
+                        "El usuario <@" + userId + "> ha lanzado un reto a " + oponenteParaMensaje + ".\n" +
                         "La afrenta es pública. ¡Que gane el mejor código!";
 
                 this.enviarMensajeDueloConBotones(idOponente, userId);
