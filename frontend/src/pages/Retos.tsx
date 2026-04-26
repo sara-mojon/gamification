@@ -35,6 +35,18 @@ interface FrontendChallenge {
   tests: Record<string, string>; 
 }
 
+const obtenerInfoDificultad = (rank: number) => {
+  switch (rank) {
+    case 8: return { dificultad: "Muy Fácil", color: "#4caf50", tiempo: 10 };   // Verde oscuro
+    case 7: return { dificultad: "Fácil", color: "#8bc34a", tiempo: 15 };       // Verde claro
+    case 6: return { dificultad: "Normal", color: "#ffc107", tiempo: 20 };      // Amarillo
+    case 5: return { dificultad: "Normal-Avanzado", color: "#ff9800", tiempo: 30 }; // Naranja
+    case 4: return { dificultad: "Difícil", color: "#f44336", tiempo: 45 };     // Rojo
+    case 3: return { dificultad: "Muy Difícil", color: "#d32f2f", tiempo: 60 }; // Rojo oscuro
+    default: return { dificultad: "Desconocido", color: "#9e9e9e", tiempo: 20 }; // Gris (Fallback)
+  }
+};
+
 export default function Retos() {
   const navigate = useNavigate();
   const auth = useAuth();
@@ -104,15 +116,10 @@ export default function Retos() {
           const datosBackend: BackendChallenge[] = await response.json();
           
           const datosAdaptados = datosBackend.map((retoBackend) => {
-            let dificultad = "Normal";
-            let colorDificultad = "#ff9800"; 
-            let tiempo = 20;
-            
-            if (retoBackend.rank >= 7) { 
-                dificultad = "Fácil"; colorDificultad = "#4caf50"; tiempo = 10; 
-            } else if (retoBackend.rank <= 4) { 
-                dificultad = "Difícil"; colorDificultad = "#ff4b4b"; tiempo = 45; 
-            }
+            const infoDif = obtenerInfoDificultad(retoBackend.rank);
+            const dificultad = infoDif.dificultad;
+            const colorDificultad = infoDif.color;
+            const tiempo = infoDif.tiempo;
 
             const etiquetasReales = retoBackend.tags && retoBackend.tags.length > 0 
               ? retoBackend.tags 
@@ -311,9 +318,10 @@ export default function Retos() {
       });
       
       if (response.ok) {
-        let nuevaDificultad = "Normal"; let nuevoColor = "#ff9800"; let nuevoTiempo = 20;
-        if (formData.rank >= 7) { nuevaDificultad = "Fácil"; nuevoColor = "#4caf50"; nuevoTiempo = 10; } 
-        else if (formData.rank <= 4) { nuevaDificultad = "Difícil"; nuevoColor = "#ff4b4b"; nuevoTiempo = 45; }
+        const infoDif = obtenerInfoDificultad(formData.rank);
+        const nuevaDificultad = infoDif.dificultad;
+        const nuevoColor = infoDif.color;
+        const nuevoTiempo = infoDif.tiempo;
 
         setRetos(retos.map(r => r.id === modalEditar.id ? { 
             ...r, titulo: formData.name, descripcionOriginal: formData.description,
@@ -513,12 +521,12 @@ export default function Retos() {
                 <div style={{ flex: 1 }}>
                   <label style={{ display: "block", marginBottom: "5px", fontWeight: "bold", color: "#555" }}>Dificultad Estimada</label>
                   <select value={crearFormData.rank} onChange={e => setCrearFormData({...crearFormData, rank: Number(e.target.value)})} style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid #ddd", fontSize: "1rem", boxSizing: "border-box" }}>
-                    <option value={8}>8 Kyu (Muy Fácil)</option>
-                    <option value={7}>7 Kyu (Fácil)</option>
-                    <option value={6}>6 Kyu (Normal)</option>
-                    <option value={5}>5 Kyu (Normal-Avanzado)</option>
-                    <option value={4}>4 Kyu (Difícil)</option>
-                    <option value={3}>3 Kyu (Muy Difícil)</option>
+                    <option value={8}>Muy Fácil</option>
+                    <option value={7}>Fácil</option>
+                    <option value={6}>Normal</option>
+                    <option value={5}>Normal-Avanzado</option>
+                    <option value={4}>Difícil</option>
+                    <option value={3}>Muy Difícil</option>
                   </select>
                 </div>
                 <div style={{ flex: 1 }}>
@@ -706,12 +714,12 @@ export default function Retos() {
                 <div style={{ flex: 1 }}>
                   <label style={{ display: "block", marginBottom: "5px", fontWeight: "bold", color: "#555" }}>Dificultad (Kyu Codewars)</label>
                   <select value={formData.rank} onChange={e => setFormData({...formData, rank: Number(e.target.value)})} style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid #ddd", fontSize: "1rem", boxSizing: "border-box" }}>
-                    <option value={8}>8 Kyu (Muy Fácil)</option>
-                    <option value={7}>7 Kyu (Fácil)</option>
-                    <option value={6}>6 Kyu (Normal)</option>
-                    <option value={5}>5 Kyu (Normal-Avanzado)</option>
-                    <option value={4}>4 Kyu (Difícil)</option>
-                    <option value={3}>3 Kyu (Muy Difícil)</option>
+                    <option value={8}>Muy Fácil</option>
+                    <option value={7}>Fácil</option>
+                    <option value={6}>Normal</option>
+                    <option value={5}>Normal-Avanzado</option>
+                    <option value={4}>Difícil</option>
+                    <option value={3}>Muy Difícil</option>
                   </select>
                 </div>
                 
@@ -834,9 +842,12 @@ export default function Retos() {
           <Filter size={20} color="#888" />
           <select value={dificultadFiltro} onChange={(e) => { setDificultadFiltro(e.target.value); setPaginaActual(1); }} style={{ padding: "12px", borderRadius: "6px", border: "1px solid #ddd", fontSize: "1rem", outline: "none", cursor: "pointer", boxSizing: "border-box" }}>
             <option value="Todas">Cualquier dificultad</option>
+            <option value="Muy Fácil">Muy Fácil</option>
             <option value="Fácil">Fácil</option>
             <option value="Normal">Normal</option>
+            <option value="Normal-Avanzado">Normal-Avanzado</option>
             <option value="Difícil">Difícil</option>
+            <option value="Muy Difícil">Muy Difícil</option>
           </select>
         </div>
         <select value={etiquetaFiltro} onChange={(e) => { setEtiquetaFiltro(e.target.value); setPaginaActual(1); }} style={{ padding: "12px", borderRadius: "6px", border: "1px solid #ddd", fontSize: "1rem", outline: "none", cursor: "pointer", boxSizing: "border-box" }}>
