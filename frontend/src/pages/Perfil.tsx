@@ -27,7 +27,7 @@ export default function Perfil() {
   const email = auth.user?.profile.email || "correo@oculto.com";
 
   const baseUrl = import.meta.env.VITE_USER_URL || 'http://localhost:8080';
-  const keycloakAccountUrl = import.meta.env.VITE_KEYCLOAK_ACCOUNT_URL || 'https://auth.sara.local/realms/masorange-realm/account/';
+  const keycloakAccountUrl = import.meta.env.VITE_KEYCLOAK_ACCOUNT_URL || 'https://auth.saramg.org/realms/masorange-realm/account/';
 
   const [estadisticas, setEstadisticas] = useState<PerfilData>({
     puntos: 0,

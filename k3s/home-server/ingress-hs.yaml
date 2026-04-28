@@ -126,3 +126,15 @@ spec:
                 name: service-challenges
                 port:
                   number: 8081
+
+    # 5. LOKI (Solo Local)
+    - host: loki.sara.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: lgtm-sara-loki
+                port:
+                  number: 3100

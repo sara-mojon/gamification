@@ -16,9 +16,9 @@ promtail:
   enabled: true
   config:
     # Se despliega como DaemonSet (uno en cada nodo: Home + AI)
-    lokiAddress: http://lgtm-loki:3100/loki/api/v1/push
+    lokiAddress: http://lgtm-sara-loki:3100/loki/api/v1/push
     clients:
-      - url: http://lgtm-loki:3100/loki/api/v1/push
+      - url: http://lgtm-sara-loki:3100/loki/api/v1/push
 
 # 3. Configuración de GRAFANA (El visualizador)
 grafana:
@@ -41,13 +41,11 @@ grafana:
   ingress:
     enabled: true
     ingressClassName: traefik
+    annotations:
+      traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
     hosts:
-      - grafana.sara.local
-    # Si quieres HTTPS inmediato con tu certificado wildcard:
-    tls:
-      - secretName: sara-local-tls
-        hosts:
-          - grafana.sara.local
+      - grafana.saramg.org # (Publico)
+      - grafana.sara.local # (Local)
 
   # Optimización de recursos (Ligero)
   resources:

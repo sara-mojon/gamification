@@ -50,12 +50,18 @@ spec:
                 secretKeyRef:
                   name: app-secret
                   key: db-password
-            - name: KC_HOSTNAME
-              value: "auth.sara.local"
-            - name: KC_PROXY
-              value: "edge"
-            - name: KC_HOSTNAME_STRICT_HTTPS
+            - name: KC_HOSTNAME_URL
+              value: "https://auth.saramg.org"
+            - name: KC_HOSTNAME_ADMIN_URL
+              value: "https://auth.saramg.org"
+            - name: KC_HOSTNAME_STRICT
               value: "false"
+            - name: KC_HOSTNAME_STRICT_HTTPS
+              value: "true"
+            - name: KC_HTTP_ENABLED
+              value: "true"
+            - name: KC_PROXY_HEADERS
+              value: "xforwarded"
           ports:
             - containerPort: 8080
 ---

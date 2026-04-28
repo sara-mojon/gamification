@@ -1,0 +1,15 @@
+# k3s/ai-server/promtail.yaml
+
+loki:
+  enabled: false
+grafana:
+  enabled: false
+
+# Encendemos solo el recolector
+promtail:
+  enabled: true
+  config:
+    # Le decimos que viaje por Tailscale hasta el Home Server
+    lokiAddress: http://loki.sara.local/loki/api/v1/push
+    clients:
+      - url: http://loki.sara.local/loki/api/v1/push
