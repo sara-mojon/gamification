@@ -12,15 +12,19 @@ import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.beans.factory.annotation.Value;
-
+import java.time.format.DateTimeFormatter;
 import org.apache.poi.ss.usermodel.*;
 import org.slf4j.LoggerFactory;
 import org.slf4j.Logger;
 import org.springframework.web.reactive.function.client.WebClient;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import es.masorange.backend.model.*;
 import es.masorange.backend.repository.ChallengeRepository;
 import es.masorange.backend.repository.PromptTemplateRepository;
+import es.masorange.backend.repository.UserSubmissionRepository;
 
 @Service
 public class ChallengeService {
@@ -29,15 +33,17 @@ public class ChallengeService {
     private final WebClient webClient;
     private final ChallengeRepository challengeRepository;
     private final PromptTemplateRepository promptTemplateRepository;
+    private final UserSubmissionRepository userSubmissionRepository;
 
     @Value("${ollama.url:http://localhost:11434}")
     private String ollamaUrl;
 
     public ChallengeService(WebClient.Builder webClientBuilder, ChallengeRepository challengeRepository,
-            PromptTemplateRepository promptTemplateRepository) {
+            PromptTemplateRepository promptTemplateRepository, UserSubmissionRepository userSubmissionRepository) {
         this.webClient = webClientBuilder.baseUrl("https://www.codewars.com/api/v1").build();
         this.challengeRepository = challengeRepository;
         this.promptTemplateRepository = promptTemplateRepository;
+        this.userSubmissionRepository = userSubmissionRepository;
     }
 
     public CodeWarsChallengeDTO importChallengeFromCodeWars(String challengeId) {
@@ -92,6 +98,18 @@ public class ChallengeService {
         return allChallenges;
     }
 
+    public List<Challenge> getAllChallengesForUser(String keycloakId) {
+        log.info("Recuperando todos los challenges de la BBDD...");
+        List<Challenge> challenges = challengeRepository.findAll();
+
+        List<Long> solvedIds = userSubmissionRepository.findSolvedChallengeIdsByKeycloakId(keycloakId);
+        log.info("Recuperando los challenges resueltos por el usuario: {}", keycloakId);
+
+        challenges.forEach(c -> c.setSolved(solvedIds.contains(c.getId())));
+
+        return challenges;
+    }
+
     public Optional<Challenge> getChallenge(Long id) {
         log.info("Buscando challenge con ID interno: {}", id);
         Optional<Challenge> challenge = challengeRepository.findById(id);
@@ -101,6 +119,16 @@ public class ChallengeService {
         }
 
         return challenge;
+    }
+
+    public Optional<Challenge> getChallengeForUser(Long id, String keycloakId) {
+        log.info("Buscando challenge con ID interno: {}", id);
+        return challengeRepository.findById(id).map(challenge -> {
+            boolean isSolved = userSubmissionRepository.existsByKeycloakIdAndChallengeId(keycloakId, id);
+            challenge.setSolved(isSolved);
+
+            return challenge;
+        });
     }
 
     public BasicResponseDTO deleteChallenge(Long id) {
@@ -415,6 +443,80 @@ public class ChallengeService {
             }
         }
         return cleaned;
+    }
+
+    public long countSolvedChallenges(String keycloakId) {
+        return userSubmissionRepository.countByKeycloakId(keycloakId);
+    }
+
+    // Método para el historial detallado
+    public List<ChallengeHistoryDTO> getUserHistory(String keycloakId) {
+        List<UserSubmission> submissions = userSubmissionRepository.findByKeycloakIdOrderBySolvedAtDesc(keycloakId);
+
+        return submissions.stream().map(sub -> {
+            Challenge challenge = sub.getChallenge();
+
+            // Lógica local temporal (Sustituye lo que haría Gamification)
+            String dificultad;
+            int puntos;
+            switch (challenge.getRank() != null ? challenge.getRank() : 8) {
+                case 8:
+                    dificultad = "Muy Fácil";
+                    puntos = 3;
+                    break;
+                case 7:
+                    dificultad = "Fácil";
+                    puntos = 5;
+                    break;
+                case 6:
+                    dificultad = "Normal";
+                    puntos = 10;
+                    break;
+                case 5:
+                    dificultad = "Normal-Avanzado";
+                    puntos = 15;
+                    break;
+                case 4:
+                    dificultad = "Difícil";
+                    puntos = 25;
+                    break;
+                case 3:
+                    dificultad = "Muy Difícil";
+                    puntos = 50;
+                    break;
+                default:
+                    dificultad = "Kyu " + challenge.getRank();
+                    puntos = 0;
+            }
+
+            String fechaStr = sub.getSolvedAt() != null
+                    ? sub.getSolvedAt().format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy"))
+                    : "---";
+
+            return new ChallengeHistoryDTO(
+                    challenge.getId(),
+                    challenge.getName(),
+                    fechaStr,
+                    puntos,
+                    dificultad);
+        }).toList();
+    }
+
+    public String extractKeycloakIdFromToken(String authHeader) {
+        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            try {
+                String token = authHeader.substring(7);
+                String[] parts = token.split("\\.");
+                if (parts.length > 1) {
+                    String payload = new String(java.util.Base64.getUrlDecoder().decode(parts[1]));
+                    ObjectMapper mapper = new ObjectMapper();
+                    return mapper.readTree(payload).path("sub").asText();
+                }
+            } catch (Exception e) {
+                log.error("Error al decodificar token", e);
+            }
+        }
+        return "desconocido";
     }
 
 }

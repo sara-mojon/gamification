@@ -23,9 +23,11 @@ import org.slf4j.Logger;
 
 import es.masorange.backend.model.BasicResponseDTO;
 import es.masorange.backend.model.Challenge;
+import es.masorange.backend.model.ChallengeHistoryDTO;
 import es.masorange.backend.model.CodeWarsChallengeDTO;
 import es.masorange.backend.services.ChallengeService;
 import es.masorange.backend.services.CodeExecutionService;
+
 import org.springframework.web.bind.annotation.RequestParam;
 
 @RestController
@@ -75,14 +77,32 @@ public class ChallengeController {
         }
     }
 
-    @GetMapping
+    @GetMapping("/all")
     public List<Challenge> getAllChallenges() {
         return challengeService.getAllChallenges();
     }
 
-    @GetMapping("/{id}")
-    public ResponseEntity<Challenge> getChallenge(@PathVariable Long id) {
+    @GetMapping
+    public ResponseEntity<List<Challenge>> getAllChallenges(
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+        String keycloakId = challengeService.extractKeycloakIdFromToken(authHeader);
+        List<Challenge> retos = challengeService.getAllChallengesForUser(keycloakId);
+        return ResponseEntity.ok(retos);
+    }
+
+    @GetMapping("/{id}/nosolved")
+    public ResponseEntity<Challenge> getChallengeWithoutSolved(@PathVariable Long id) {
         return challengeService.getChallenge(id)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<Challenge> getChallenge(
+            @PathVariable Long id,
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+        String keycloakId = challengeService.extractKeycloakIdFromToken(authHeader);
+        return challengeService.getChallengeForUser(id, keycloakId)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
@@ -95,6 +115,19 @@ public class ChallengeController {
     @PatchMapping("/{id}")
     public BasicResponseDTO updateChallenge(@PathVariable Long id, @RequestBody Challenge dto) {
         return challengeService.updateChallenge(id, dto);
+    }
+
+    @GetMapping("/me/stats")
+    public ResponseEntity<Map<String, Long>> getMyStats(@RequestHeader("Authorization") String authHeader) {
+        String keycloakId = challengeService.extractKeycloakIdFromToken(authHeader);
+        long resueltos = challengeService.countSolvedChallenges(keycloakId);
+        return ResponseEntity.ok(Map.of("retosCompletados", resueltos));
+    }
+
+    @GetMapping("/me/history")
+    public ResponseEntity<List<ChallengeHistoryDTO>> getMyHistory(@RequestHeader("Authorization") String authHeader) {
+        String keycloakId = challengeService.extractKeycloakIdFromToken(authHeader);
+        return ResponseEntity.ok(challengeService.getUserHistory(keycloakId));
     }
 
     // --

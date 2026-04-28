@@ -12,9 +12,8 @@ interface Reto {
   id?: number;
   name: string;
   description: string;
-  rank?: {
-    name: string;
-  };
+  rank: number;
+  isSolved?: boolean;
 }
 
 interface ParsedResult {
@@ -23,6 +22,24 @@ interface ParsedResult {
   message: string;
   details: string;
 }
+
+interface TestDetail {
+  status: string;
+  name: string;
+  error?: string;
+}
+
+const obtenerInfoDificultad = (rank: number) => {
+  switch (rank) {
+    case 8: return { dificultad: "Muy Fácil", color: "#4caf50", tiempo: 10 };   // Verde oscuro
+    case 7: return { dificultad: "Fácil", color: "#8bc34a", tiempo: 15 };       // Verde claro
+    case 6: return { dificultad: "Normal", color: "#ffc107", tiempo: 20 };      // Amarillo
+    case 5: return { dificultad: "Normal-Avanzado", color: "#ff9800", tiempo: 30 }; // Naranja
+    case 4: return { dificultad: "Difícil", color: "#f44336", tiempo: 45 };     // Rojo
+    case 3: return { dificultad: "Muy Difícil", color: "#d32f2f", tiempo: 60 }; // Rojo oscuro
+    default: return { dificultad: "Desconocido", color: "#9e9e9e", tiempo: 20 }; // Gris (Fallback)
+  }
+};
 
 // --- CONSTANTES ---
 const plantillasCodigo = {
@@ -54,7 +71,7 @@ const parseTestResult = (rawOutput: string): ParsedResult => {
       const buildDetails = () => {
           let text = userLogs ? `[TU OUTPUT]\n${userLogs}\n\n` : "";
           text += "[RESULTADO DE LOS TESTS]\n";
-          report.results.forEach((r: any) => {
+          report.results.forEach((r: TestDetail) => {
               const icon = r.status === "OK" ? "✅" : "❌";
               text += `${icon} ${r.name}`;
               if (r.status === "FAIL" && r.error) text += `\n   ↳ Error: ${r.error}`;
@@ -132,6 +149,7 @@ export default function Entrenar() {
 
         if (resReto.ok) {
           const datosReto = await resReto.json();
+          datosReto.isSolved = datosReto.isSolved ?? datosReto.solved ?? false;
           setRetoActual(datosReto);
         } else {
           setError("No se pudo cargar el reto. Puede que no exista.");
@@ -228,11 +246,25 @@ export default function Entrenar() {
           <ChevronLeft size={20} /> Volver a los retos
         </button>
 
-        <div style={{ display: "flex", alignItems: "center", marginBottom: "20px", flexShrink: 0 }}>
-          <h1 style={{ margin: 0, fontSize: "2rem", color: "#1e1e1e", marginRight: "15px" }}>{retoActual.name || "Reto sin título"}</h1>
-          <span style={{ backgroundColor: "#4caf50", color: "white", padding: "4px 10px", borderRadius: "20px", fontSize: "0.8rem", fontWeight: "bold" }}>
-            {retoActual.rank?.name || "Normal"}
+        <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: "10px", marginBottom: "20px", flexShrink: 0 }}>
+          <h1 style={{ margin: 0, fontSize: "2rem", color: "#1e1e1e", marginRight: "5px" }}>
+            {retoActual.name || "Reto sin título"}
+          </h1>
+          <span style={{ 
+            backgroundColor: obtenerInfoDificultad(retoActual.rank).color, 
+            color: "white", padding: "4px 10px", borderRadius: "20px", fontSize: "0.8rem", fontWeight: "bold" 
+          }}>
+            {obtenerInfoDificultad(retoActual.rank).dificultad}
           </span>
+          {retoActual.isSolved && (
+            <span style={{ 
+              backgroundColor: "#e8f5e9", color: "#2e7d32", border: "1px solid #4caf50",
+              padding: "3px 10px", borderRadius: "20px", fontSize: "0.8rem", fontWeight: "bold", 
+              display: "flex", alignItems: "center" 
+            }}>
+              <CheckCircle size={14} style={{ marginRight: "5px" }} /> Completado
+            </span>
+          )}
         </div>
 
         <h3 style={{ borderBottom: "2px solid #ddd", paddingBottom: "10px", color: "#333", display: "flex", alignItems: "center", flexShrink: 0 }}>

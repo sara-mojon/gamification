@@ -2,15 +2,16 @@
 
 import { useState, useEffect } from "react";
 import { useAuth } from "react-oidc-context";
-import { User, Code, Star, Calendar, Activity, AlertTriangle, Settings } from "lucide-react";
+import { User, Calendar, Code, Star, Activity, AlertTriangle, Settings } from "lucide-react";
 import toast from 'react-hot-toast';
 
-const actividadReciente = [
-  { id: 101, titulo: "Sumar dos números", fecha: "Hoy, 10:30", puntosGanados: 10, dificultad: "Fácil" },
-  { id: 102, titulo: "Contar vocales", fecha: "Ayer, 18:15", puntosGanados: 15, dificultad: "Fácil" },
-  { id: 103, titulo: "Invertir una cadena de texto", fecha: "Ayer, 17:40", puntosGanados: 25, dificultad: "Normal" },
-  { id: 104, titulo: "Detector de Palíndromos", fecha: "Hace 3 días", puntosGanados: 15, dificultad: "Fácil" },
-];
+interface HistorialReto {
+  id: number;
+  titulo: string;
+  fecha: string;
+  puntosGanados: number;
+  dificultad: string;
+}
 
 interface PerfilData {
   puntos: number;
@@ -26,7 +27,8 @@ export default function Perfil() {
   const username = auth.user?.profile.preferred_username || "Hacker Anónimo";
   const email = auth.user?.profile.email || "correo@oculto.com";
 
-  const baseUrl = import.meta.env.VITE_USER_URL || 'http://localhost:8080';
+  const baseUrlUser = import.meta.env.VITE_USER_URL || 'http://localhost:8080';
+  const baseUrlChallenges = import.meta.env.VITE_CHALLENGES_URL || 'http://localhost:8081';
   const keycloakAccountUrl = import.meta.env.VITE_KEYCLOAK_ACCOUNT_URL || 'https://auth.saramg.org/realms/masorange-realm/account/';
 
   const [estadisticas, setEstadisticas] = useState<PerfilData>({
@@ -36,6 +38,8 @@ export default function Perfil() {
     rangoGlobal: "-" 
   });
   
+  const [historial, setHistorial] = useState<HistorialReto[]>([]);
+  const [mostrarTodoHistorial, setMostrarTodoHistorial] = useState(false);
   const [lenguajePreferido, setLenguajePreferido] = useState("java"); 
   const [userId, setUserId] = useState<number | null>(null);
   const [cargando, setCargando] = useState(true);
@@ -47,14 +51,14 @@ export default function Perfil() {
 
       try {
         // 1. Pedimos los datos básicos del usuario
-        const response = await fetch(`${baseUrl}/api/users/me`, {
+        const response = await fetch(`${baseUrlUser}/api/users/me`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
 
         // 2. Pedimos su posición en el ranking
         let posicionRanking: number | string = "-";
         try {
-          const rankResponse = await fetch(`${baseUrl}/api/users/ranking/${username}`, {
+          const rankResponse = await fetch(`${baseUrlUser}/api/users/ranking/${username}`, {
             headers: { 'Authorization': `Bearer ${token}` }
           });
           if (rankResponse.ok) {
@@ -65,13 +69,40 @@ export default function Perfil() {
           console.error("No se pudo obtener el ranking", error);
         }
 
+        // 3. Pedimos el contador de retos resueltos
+        let totalResueltos = 0;
+        try {
+          const statsRes = await fetch(`${baseUrlChallenges}/api/challenges/me/stats`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          if (statsRes.ok) {
+            const statsData = await statsRes.json();
+            totalResueltos = statsData.retosCompletados;
+          }
+        } catch (error) { 
+          console.error("No se pudieron obtener las estadísticas de retos:", error); 
+        }
+
+        // 4. Pedimos el historial de actividad real
+        try {
+          const historyRes = await fetch(`${baseUrlChallenges}/api/challenges/me/history`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          if (historyRes.ok) {
+            const historyData = await historyRes.json();
+            setHistorial(historyData); // Guardamos la lista real
+          }
+        } catch (error) { 
+          console.error("No se pudo obtener el historial de retos:", error); 
+        }
+
         if (response.ok) {
           const misDatos = await response.json();
           setUserId(misDatos.id);
 
           setEstadisticas({
             puntos: misDatos.score || 0,
-            retosCompletados: misDatos.retosCompletados || 0,
+            retosCompletados: totalResueltos,
             rachaDias: misDatos.currentStreak || 0,
             rangoGlobal: posicionRanking
           });
@@ -88,7 +119,7 @@ export default function Perfil() {
     };
 
     cargarMiPerfil();
-  }, [token, baseUrl, username]);
+  }, [token, baseUrlUser, baseUrlChallenges, username]);
 
   const cambiarLenguaje = async (e: React.ChangeEvent<HTMLSelectElement>) => {
     const nuevoLenguaje = e.target.value;
@@ -96,7 +127,7 @@ export default function Perfil() {
 
     if (!userId) return;
 
-    const peticion = fetch(`${baseUrl}/api/users/${userId}`, {
+    const peticion = fetch(`${baseUrlUser}/api/users/${userId}`, {
       method: 'PATCH',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -121,7 +152,7 @@ export default function Perfil() {
     setMostrarModal(false);
 
     try {
-      const response = await fetch(`${baseUrl}/api/users/${userId}`, {
+      const response = await fetch(`${baseUrlUser}/api/users/${userId}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -138,8 +169,10 @@ export default function Perfil() {
   };
 
   if (cargando) {
-    return <div style={{ textAlign: "center", padding: "50px", color: "#666" }}>Cargando tu perfil... 🕵️‍♀️</div>;
+    return <div style={{ textAlign: "center", padding: "50px", color: "#666" }}>Cargando tu perfil...</div>;
   }
+
+  const historialVisible = mostrarTodoHistorial ? historial : historial.slice(0, 3);
 
   return (
     <>
@@ -200,7 +233,7 @@ export default function Perfil() {
                 </div>
                 
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <div style={{ display: "flex", alignItems: "center", color: "#555" }}><Code size={18} style={{ marginRight: "10px", color: "#4caf50" }} /> Katas Resueltas</div>
+                  <div style={{ display: "flex", alignItems: "center", color: "#555" }}><Code size={18} style={{ marginRight: "10px", color: "#4caf50" }} /> Retos Resueltos</div>
                   <strong style={{ fontSize: "1.2rem", color: "#1e1e1e" }}>{estadisticas.retosCompletados}</strong>
                 </div>
                 
@@ -251,55 +284,70 @@ export default function Perfil() {
           </div>
 
           {/* COLUMNA DERECHA (Historial) */}
-          <div style={{ flex: "2 1 500px", backgroundColor: "white", borderRadius: "10px", padding: "30px", boxShadow: "0 4px 6px rgba(0,0,0,0.05)", border: "1px solid #eaeaea" }}>
+          <div style={{ flex: "2 1 500px", backgroundColor: "white", borderRadius: "10px", padding: "30px", boxShadow: "0 4px 6px rgba(0,0,0,0.05)", border: "1px solid #eaeaea", alignSelf: "flex-start" }}>
+            
             <h3 style={{ margin: "0 0 25px 0", fontSize: "1.4rem", color: "#333", display: "flex", alignItems: "center" }}>
               <Calendar size={24} style={{ marginRight: "10px", color: "#888" }} />
               Actividad Reciente
             </h3>
 
             <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
-              {actividadReciente.map((actividad) => (
-                <div key={actividad.id} style={{ 
-                  display: "flex", justifyContent: "space-between", alignItems: "center", 
-                  padding: "20px", borderRadius: "8px", border: "1px solid #eee",
-                  transition: "background-color 0.2s"
-                }}
-                onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#fcfcfc"}
-                onMouseOut={(e) => e.currentTarget.style.backgroundColor = "transparent"}
-                >
-                  <div>
-                    <h4 style={{ margin: "0 0 5px 0", fontSize: "1.1rem", color: "#333" }}>{actividad.titulo}</h4>
-                    <div style={{ display: "flex", gap: "15px", alignItems: "center", fontSize: "0.9rem", color: "#888" }}>
-                      <span>{actividad.fecha}</span>
-                      <span style={{ 
-                        backgroundColor: actividad.dificultad === "Fácil" ? "#e8f5e9" : "#fff3e0", 
-                        color: actividad.dificultad === "Fácil" ? "#2e7d32" : "#ef6c00", 
-                        padding: "2px 8px", borderRadius: "10px", fontWeight: "bold", fontSize: "0.8rem"
-                      }}>
-                        {actividad.dificultad}
+              {historial.length > 0 ? (
+                historialVisible.map((item) => (
+                  <div key={item.id} style={{ 
+                    display: "flex", justifyContent: "space-between", alignItems: "center", 
+                    padding: "20px", borderRadius: "8px", border: "1px solid #eee",
+                    transition: "background-color 0.2s"
+                  }}
+                  onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#fcfcfc"}
+                  onMouseOut={(e) => e.currentTarget.style.backgroundColor = "transparent"}
+                  >
+                    <div>
+                      <h4 style={{ margin: "0 0 5px 0", fontSize: "1.1rem", color: "#333" }}>{item.titulo}</h4>
+                      <div style={{ display: "flex", gap: "15px", alignItems: "center", fontSize: "0.9rem", color: "#888" }}>
+                        <span>{item.fecha}</span>
+                        <span style={{ 
+                          backgroundColor: item.dificultad.includes("Fácil") ? "#e8f5e9" : item.dificultad.includes("Normal") ? "#fff3e0" : "#ffebee", 
+                          color: item.dificultad.includes("Fácil") ? "#2e7d32" : item.dificultad.includes("Normal") ? "#ef6c00" : "#c62828", 
+                          padding: "2px 8px", borderRadius: "10px", fontWeight: "bold", fontSize: "0.8rem"
+                        }}>
+                          {item.dificultad}
+                        </span>
+                      </div>
+                    </div>
+                    
+                    <div style={{ textAlign: "right" }}>
+                      <span style={{ display: "block", color: "#4caf50", fontWeight: "bold", fontSize: "1.2rem" }}>
+                        +{item.puntosGanados} px
                       </span>
                     </div>
                   </div>
-                  
-                  <div style={{ textAlign: "right" }}>
-                    <span style={{ display: "block", color: "#4caf50", fontWeight: "bold", fontSize: "1.2rem" }}>
-                      +{actividad.puntosGanados} px
-                    </span>
-                  </div>
+                ))
+              ) : (
+                <div style={{ textAlign: "center", padding: "40px", color: "#aaa", backgroundColor: "#fcfcfc", borderRadius: "8px", border: "1px dashed #ddd" }}>
+                  <Code size={48} style={{ margin: "0 auto 10px auto", opacity: 0.3, display: "block" }} />
+                  <p style={{ margin: 0 }}>Aún no has resuelto ningún reto.</p>
+                  <p style={{ margin: "5px 0 0 0", fontWeight: "bold", color: "#888" }}>¡Empieza tu primera Kata!</p>
                 </div>
-              ))}
+              )}
             </div>
 
-            <button style={{ 
-              width: "100%", padding: "15px", marginTop: "20px", borderRadius: "8px", 
-              backgroundColor: "#f9f9f9", border: "1px solid #ddd", color: "#666", 
-              fontWeight: "bold", cursor: "pointer", transition: "background-color 0.2s"
-            }}
-            onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#eee"}
-            onMouseOut={(e) => e.currentTarget.style.backgroundColor = "#f9f9f9"}
-            >
-              Ver todo el historial
-            </button>
+            {/* Lógica del botón de Ver Todo */}
+            {historial.length > 3 && (
+              <button 
+                onClick={() => setMostrarTodoHistorial(!mostrarTodoHistorial)}
+                style={{ 
+                  width: "100%", padding: "15px", marginTop: "20px", borderRadius: "8px", 
+                  backgroundColor: "#f9f9f9", border: "1px solid #ddd", color: "#666", 
+                  fontWeight: "bold", cursor: "pointer", transition: "background-color 0.2s"
+                }}
+                onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#eee"}
+                onMouseOut={(e) => e.currentTarget.style.backgroundColor = "#f9f9f9"}
+              >
+                {mostrarTodoHistorial ? "Ver menos" : "Ver todo el historial"}
+              </button>
+            )}
+
           </div>
 
         </div>

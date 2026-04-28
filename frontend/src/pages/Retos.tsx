@@ -18,6 +18,7 @@ interface BackendChallenge {
   isVisible?: boolean; 
   tags?: string[];
   tests?: Record<string, string>; 
+  isSolved?: boolean;
 }
 
 interface FrontendChallenge {
@@ -33,6 +34,7 @@ interface FrontendChallenge {
   isVisible: boolean; 
   tieneTests: boolean; 
   tests: Record<string, string>; 
+  isSolved: boolean;
 }
 
 const obtenerInfoDificultad = (rank: number) => {
@@ -66,6 +68,7 @@ export default function Retos() {
   const [tiempoFiltro, setTiempoFiltro] = useState("Todos");
   const [testFiltro, setTestFiltro] = useState("Todos");
   const [visibilidadFiltro, setVisibilidadFiltro] = useState("Todos");
+  const [estadoResueltoFiltro, setEstadoResueltoFiltro] = useState("Todos");
   
   const [paginaActual, setPaginaActual] = useState(1);
 
@@ -140,7 +143,8 @@ export default function Retos() {
               rangoRaw: retoBackend.rank,
               isVisible: retoBackend.isVisible !== false,
               tieneTests: tieneTests,
-              tests: diccionarioTests 
+              tests: diccionarioTests,
+              isSolved: retoBackend.isSolved || false
             };
           });
           setRetos(datosAdaptados);
@@ -444,6 +448,10 @@ export default function Retos() {
 
     let coincideTests = true;
     let coincideVisibilidad = true;
+    let coincideResuelto = true;
+
+    if (estadoResueltoFiltro === "Resueltos") coincideResuelto = reto.isSolved;
+    if (estadoResueltoFiltro === "Pendientes") coincideResuelto = !reto.isSolved;
     
     if (isAdmin) {
       if (testFiltro === "Con tests") coincideTests = reto.tieneTests;
@@ -452,7 +460,7 @@ export default function Retos() {
       if (visibilidadFiltro === "Borradores") coincideVisibilidad = !reto.isVisible;
     }
 
-    return coincideTexto && coincideDificultad && coincideEtiqueta && coincideTiempo && coincideTests && coincideVisibilidad;
+    return coincideTexto && coincideDificultad && coincideEtiqueta && coincideTiempo && coincideTests && coincideVisibilidad && coincideResuelto;
   });
 
   const totalPaginas = Math.ceil(retosFiltrados.length / ITEMS_POR_PAGINA) || 1;
@@ -867,6 +875,13 @@ export default function Retos() {
             <option value="mas30">Más de 30 min</option>
           </select>
         </div>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <select value={estadoResueltoFiltro} onChange={(e) => { setEstadoResueltoFiltro(e.target.value); setPaginaActual(1); }} style={{ padding: "12px", borderRadius: "6px", border: "1px solid #ddd", fontSize: "1rem", outline: "none", cursor: "pointer", boxSizing: "border-box" }}>
+            <option value="Todos">Cualquier estado</option>
+            <option value="Resueltos">Resueltos</option>
+            <option value="Pendientes">Pendientes</option>
+          </select>
+        </div>
         
         {isAdmin && (
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
@@ -896,7 +911,12 @@ export default function Retos() {
                 <div style={{ display: "flex", alignItems: "center", marginBottom: "10px" }}>
                   <h2 style={{ margin: 0, fontSize: "1.4rem", color: "#333", marginRight: "15px" }}>{reto.titulo}</h2>
                   <span style={{ backgroundColor: reto.colorDificultad, color: "white", padding: "4px 10px", borderRadius: "20px", fontSize: "0.8rem", fontWeight: "bold" }}>{reto.dificultad}</span>
-                  
+                  {reto.isSolved && (
+                    <span style={{ marginLeft: "10px", backgroundColor: "#e8f5e9", color: "#2e7d32", padding: "4px 10px", borderRadius: "4px", fontSize: "0.8rem", fontWeight: "bold", display: "flex", alignItems: "center" }}>
+                      <CheckCircle2 size={14} style={{ marginRight: "5px" }} /> Completado
+                    </span>
+                  )}
+
                   {!reto.isVisible && (
                     <span style={{ marginLeft: "10px", backgroundColor: "#fff3e0", color: "#e65100", padding: "4px 10px", borderRadius: "4px", fontSize: "0.8rem", fontWeight: "bold", display: "flex", alignItems: "center" }}>
                       <EyeOff size={14} style={{ marginRight: "5px" }} /> Oculto (Borrador)

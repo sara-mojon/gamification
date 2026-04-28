@@ -4,6 +4,9 @@ import java.util.*;
 
 import org.hibernate.annotations.*;
 import org.hibernate.type.SqlTypes;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import java.time.LocalDateTime;
 import jakarta.persistence.*;
 import jakarta.persistence.Table;
@@ -49,6 +52,10 @@ public class Challenge {
     @UpdateTimestamp
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
+
+    @Transient
+    @JsonProperty("isSolved")
+    private boolean isSolved;
 
     @ElementCollection
     @CollectionTable(name = "challenge_languages", joinColumns = @JoinColumn(name = "challenge_id"))
