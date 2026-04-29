@@ -360,7 +360,12 @@ public class SlackIntegrationService {
         HttpEntity<Map<String, String>> request = new HttpEntity<>(body, headers);
 
         try {
-            ResponseEntity<Map> response = restTemplate.postForEntity(urlOpen, request, Map.class);
+            ResponseEntity<Map<String, Object>> response = restTemplate.exchange(
+                    urlOpen,
+                    HttpMethod.POST,
+                    request,
+                    new ParameterizedTypeReference<Map<String, Object>>() {
+                    });
             Map<String, Object> respBody = response.getBody();
 
             if (respBody != null && Boolean.TRUE.equals(respBody.get("ok"))) {
@@ -396,8 +401,12 @@ public class SlackIntegrationService {
         HttpEntity<Map<String, String>> openRequest = new HttpEntity<>(openBody, headers);
 
         try {
-            ResponseEntity<Map> response = restTemplate.postForEntity("https://slack.com/api/conversations.open",
-                    openRequest, Map.class);
+            ResponseEntity<Map<String, Object>> response = restTemplate.exchange(
+                    "https://slack.com/api/conversations.open",
+                    HttpMethod.POST,
+                    openRequest,
+                    new ParameterizedTypeReference<Map<String, Object>>() {
+                    });
             Map<String, Object> respBody = response.getBody();
 
             if (respBody != null && Boolean.TRUE.equals(respBody.get("ok"))) {

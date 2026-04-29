@@ -3,7 +3,6 @@ package es.masorange.backend.controller;
 import java.util.HashMap;
 import java.util.Map;
 
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.util.MultiValueMap;
 import org.springframework.http.ResponseEntity;
@@ -17,7 +16,6 @@ import org.springframework.web.bind.annotation.RestController;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.core.type.TypeReference;
 
-import es.masorange.backend.repository.ChallengeRepository;
 import es.masorange.backend.services.SlackIntegrationService;
 
 @RestController
@@ -55,7 +53,9 @@ public class SlackController {
             }
 
             if ("event_callback".equals(payload.get("type"))) {
-                Map<String, Object> event = (Map<String, Object>) payload.get("event");
+                Map<String, Object> event = mapper.convertValue(payload.get("event"),
+                        new TypeReference<Map<String, Object>>() {
+                        });
                 if (event != null && "message".equals(event.get("type")) && event.get("bot_id") == null) {
                     String idUsuario = (String) event.get("user");
                     slackService.enviarMensajeASlack(idUsuario, "¡Hola! Estoy listo para procesar tus katas.");
