@@ -18,9 +18,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-
 import org.slf4j.Logger;
 
 import es.masorange.backend.model.BasicResponseDTO;
@@ -28,7 +25,6 @@ import es.masorange.backend.model.Challenge;
 import es.masorange.backend.model.ChallengeHistoryDTO;
 import es.masorange.backend.model.CodeWarsChallengeDTO;
 import es.masorange.backend.services.ChallengeService;
-import es.masorange.backend.services.CodeExecutionService;
 
 import org.springframework.web.bind.annotation.RequestParam;
 
@@ -39,13 +35,11 @@ public class ChallengeController {
     private static final Logger log = LoggerFactory.getLogger(ChallengeController.class);
 
     private final ChallengeService challengeService;
-    private final CodeExecutionService codeExecutionService;
     private final OllamaTaskService ollamaTaskService;
 
-    public ChallengeController(ChallengeService challengeService, CodeExecutionService codeExecutionService,
+    public ChallengeController(ChallengeService challengeService,
             OllamaTaskService ollamaTaskService) {
         this.challengeService = challengeService;
-        this.codeExecutionService = codeExecutionService;
         this.ollamaTaskService = ollamaTaskService;
     }
 
@@ -152,79 +146,6 @@ public class ChallengeController {
         String keycloakId = challengeService.extractKeycloakIdFromToken(authHeader);
         return ResponseEntity.ok(challengeService.getUserHistory(keycloakId));
     }
-
-    /*
-     * @PostMapping("/{id}/submit")
-     * public ResponseEntity<String> submitSolution(
-     * 
-     * @PathVariable Long id,
-     * 
-     * @RequestBody Map<String, String> payload,
-     * 
-     * @RequestHeader("Authorization") String token) { // Recogemos el token del
-     * usuario
-     * 
-     * String language = payload.get("language");
-     * String sourceCode = payload.get("sourceCode");
-     * 
-     * try {
-     * // 1. Ejecutar en Judge0 (Devuelve el String ||JSON_RESULT||{...})
-     * String rawResult = codeExecutionService.executeSolution(id, language,
-     * sourceCode);
-     * 
-     * // 2. Parsear el resultado para ver si ha ganado
-     * if (rawResult.contains("||JSON_RESULT||")) {
-     * String jsonPart = rawResult.substring(rawResult.indexOf("||JSON_RESULT||") +
-     * 15);
-     * ObjectMapper mapper = new ObjectMapper();
-     * JsonNode resultNode = mapper.readTree(jsonPart);
-     * 
-     * int failedTests = resultNode.path("failed").asInt(-1);
-     * 
-     * // 3. ¡Misión Cumplida! Todos los tests pasaron
-     * if (failedTests == 0) {
-     * 
-     * // TODO: 1. Comprobar en BBDD si este usuario ya había resuelto este reto
-     * // (para no darle puntos infinitos)
-     * 
-     * // boolean alreadySolved =
-     * // solutionRepository.existsByUserIdAndChallengeId(userId, id);
-     * 
-     * // TODO: 2. Si no lo había resuelto, llamar al microservicio de Gamificación
-     * 
-     * // if (!alreadySolved) {
-     * // WebClient.create(gamificationUrl)
-     * // .post()
-     * // .uri("/api/points/add")
-     * // .header("Authorization", token)
-     * // .bodyValue(Map.of("points", 10, "reason", "Challenge Completed"))
-     * // .retrieve()
-     * // .toBodilessEntity()
-     * // .block();
-     * 
-     * // 3. Guardar en BBDD que ya lo ha resuelto
-     * // solutionRepository.save(new Solution(userId, id));
-     * // }
-     * 
-     * // TODO: 4. Revisar si hay sorpassos en el Top 3 de este reto y avisar por
-     * Slack
-     * // si es así
-     * // slackIntegrationService.comprobarSorpassoPodio();
-     * 
-     * log.info("🏆 El usuario ha superado el reto {} con éxito.", id);
-     * }
-     * }
-     * 
-     * // 4. Devolver el resultado a React (sea 200 OK, habiendo ganado operdido)
-     * return ResponseEntity.ok(rawResult);
-     * 
-     * } catch (Exception e) {
-     * log.error("Error procesando submit", e);
-     * return ResponseEntity.internalServerError().body("Error interno: " +
-     * e.getMessage());
-     * }
-     * }
-     */
 
     @PostMapping("/{id}/submit")
     public ResponseEntity<String> submitSolution(
