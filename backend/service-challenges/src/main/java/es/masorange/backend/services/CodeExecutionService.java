@@ -13,9 +13,7 @@ import org.springframework.web.client.RestClient;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
-import java.util.HashMap;
 import java.util.Map;
-import java.util.Optional;
 
 @Service
 public class CodeExecutionService {
@@ -25,14 +23,11 @@ public class CodeExecutionService {
     private final ObjectMapper objectMapper;
     private final ChallengeRepository challengeRepository;
 
-    // Mapa de IDs de lenguajes de Judge0 (Asegúrate de que coincidan con tu versión
-    // de Judge0)
     private static final Map<String, Integer> JUDGE0_LANG_IDS = Map.of(
-            "javascript", 93, // Node.js
-            "python", 71, // Python 3
-            "java", 62, // Java (OpenJDK)
-            "c", 50 // C (GCC)
-    );
+            "javascript", 63,
+            "python", 71,
+            "java", 62,
+            "c", 50);
 
     public CodeExecutionService(
             @Value("${judge0.url:http://localhost:2358}") String judge0Url,
@@ -45,43 +40,42 @@ public class CodeExecutionService {
     }
 
     public String executeSolution(Long challengeId, String language, String userCode) {
-        log.info("🎬 [JUDGE0] Iniciando ejecución para challenge {} en {}", challengeId, language);
+        String langLower = language.toLowerCase();
+        log.info("🎬 [JUDGE0] Iniciando ejecución para el reto {} en {}", challengeId, langLower);
 
-        // 1. Validar Lenguaje
-        Integer langId = JUDGE0_LANG_IDS.get(language.toLowerCase());
+        Integer langId = JUDGE0_LANG_IDS.get(langLower);
         if (langId == null) {
             throw new IllegalArgumentException("Lenguaje no soportado por Judge0: " + language);
         }
 
-        // 2. Recuperar Tests Ocultos de BBDD
-        Optional<Challenge> challengeOpt = challengeRepository.findById(challengeId);
-        if (challengeOpt.isEmpty()) {
-            throw new RuntimeException("Challenge no encontrado");
-        }
+        Challenge challenge = challengeRepository.findById(challengeId)
+                .orElseThrow(() -> new RuntimeException("Challenge no encontrado: " + challengeId));
 
-        String hiddenTests = challengeOpt.get().getTests().get(language);
+        String hiddenTests = challenge.getTests().get(langLower);
         if (hiddenTests == null || hiddenTests.isBlank()) {
-            throw new RuntimeException("No hay tests generados para " + language + " en este reto.");
+            throw new RuntimeException("No hay tests generados para " + langLower + " en este reto.");
         }
 
-        // 3. Ensamblaje Inteligente (La Fusión)
-        String finalCode = assembleCode(language, userCode, hiddenTests);
+        String finalCode = assembleCode(langLower, userCode, hiddenTests);
 
+        return sendToJudge0(langId, finalCode);
+    }
+
+    /**
+     * Se encarga exclusivamente de la comunicación HTTP con el motor de Judge0.
+     */
+    private String sendToJudge0(Integer langId, String finalCode) {
         try {
-            // 4. Payload y Base64
             String sourceCodeB64 = Base64.getEncoder().encodeToString(finalCode.getBytes(StandardCharsets.UTF_8));
 
-            Map<String, Object> payload = new HashMap<>();
-            payload.put("language_id", langId);
-            payload.put("source_code", sourceCodeB64);
+            Map<String, Object> payload = Map.of(
+                    "language_id", langId,
+                    "source_code", sourceCodeB64);
 
-            String jsonBody = objectMapper.writeValueAsString(payload);
-
-            // 5. Llamada Síncrona a Judge0
             String rawResponse = restClient.post()
                     .uri("/submissions?base64_encoded=true&wait=true")
                     .contentType(MediaType.APPLICATION_JSON)
-                    .body(jsonBody)
+                    .body(objectMapper.writeValueAsString(payload))
                     .retrieve()
                     .body(String.class);
 
@@ -89,11 +83,10 @@ public class CodeExecutionService {
                 throw new RuntimeException("Respuesta vacía de Judge0");
             }
 
-            JsonNode rootNode = objectMapper.readTree(rawResponse);
-            return extractResult(rootNode);
+            return extractResult(objectMapper.readTree(rawResponse));
 
         } catch (Exception e) {
-            log.error("💥 [JUDGE0] Error CRÍTICO de ejecución: ", e);
+            log.error("[JUDGE0] Error de ejecución: ", e);
             throw new RuntimeException("Error en el servidor de evaluación.");
         }
     }
@@ -102,9 +95,7 @@ public class CodeExecutionService {
      * Une el código del usuario con los tests generados por la IA.
      */
     private String assembleCode(String language, String userCode, String aiTests) {
-        if (language.equals("java")) {
-            // En Java, los tests vienen con la clase Main entera y un }.
-            // Inyectamos el código del usuario justo antes de la última llave.
+        if ("java".equals(language)) {
             int lastBraceIndex = aiTests.lastIndexOf('}');
             if (lastBraceIndex != -1) {
                 return aiTests.substring(0, lastBraceIndex)
@@ -113,8 +104,6 @@ public class CodeExecutionService {
                         + "\n}";
             }
         }
-        // Para JS, Python y C, el código de usuario va arriba, y el framework de tests
-        // debajo.
         return userCode + "\n\n" + aiTests;
     }
 
@@ -126,27 +115,23 @@ public class CodeExecutionService {
         String compileOutput = decodeBase64(res.path("compile_output").asText(null));
         String stdout = decodeBase64(res.path("stdout").asText(null));
 
-        // Si hay error de compilación (Típico en C y Java)
         if (compileOutput != null && !compileOutput.isBlank()) {
-            log.warn("⚠️ [JUDGE0] Error de compilación: {}", compileOutput);
+            log.warn("⚠️ [JUDGE0] Error de compilación detectado.");
             return buildErrorJson("Error de Compilación", compileOutput);
         }
 
-        // Si hay error de ejecución (Excepciones, SyntaxError en JS/Python)
         if (stderr != null && !stderr.isBlank()) {
-            log.warn("⚠️ [JUDGE0] Error de ejecución: {}", stderr);
+            log.warn("⚠️ [JUDGE0] Error de ejecución detectado.");
             return buildErrorJson("Error de Ejecución", stderr);
         }
 
-        // Éxito o Fallo de los Unit Tests (El JSON Custom de nuestro framework)
         if (stdout != null && stdout.contains("||JSON_RESULT||")) {
             return stdout.substring(stdout.indexOf("||JSON_RESULT||"));
         }
 
-        // Caso límite: El código se ejecutó, pero no se imprimió nuestro JSON (ej.
-        // bucle infinito)
+        log.warn("⚠️ [JUDGE0] Ejecución finalizada sin JSON de tests válido. Output: {}", stdout);
         return buildErrorJson("Error Desconocido",
-                "El programa terminó sin generar un reporte de tests válido. Revisa bucles infinitos o salidas inesperadas.\nOutput capturado: "
+                "El programa terminó sin generar un reporte válido. Revisa bucles infinitos o salidas inesperadas.\nOutput: "
                         + stdout);
     }
 
@@ -160,13 +145,14 @@ public class CodeExecutionService {
         }
     }
 
-    // Helper para emular la estructura JSON de nuestro framework si Judge0 peta
-    // antes de llegar a los tests
+    /**
+     * Helper para emular la estructura JSON de nuestro framework si Judge0 falla
+     * prematuramente.
+     */
     private String buildErrorJson(String name, String details) {
-        // Escapamos comillas dobles y saltos de línea para no romper el JSON
         String cleanDetails = details.replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "");
-        return "||JSON_RESULT||{\"total\": 1, \"passed\": 0, \"failed\": 1, \"results\": [{\"name\": \"" + name
-                + "\", \"status\": \"FAIL\", \"error\": \"" + cleanDetails + "\"}]}";
+        return String.format(
+                "||JSON_RESULT||{\"total\": 1, \"passed\": 0, \"failed\": 1, \"results\": [{\"name\": \"%s\", \"status\": \"FAIL\", \"error\": \"%s\"}]}",
+                name, cleanDetails);
     }
-
 }

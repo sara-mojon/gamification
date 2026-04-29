@@ -480,7 +480,7 @@ export default function Retos() {
         } catch (error) {
           console.warn("Fallo temporal de red...", error);
         }
-      }, 5000); 
+      }, 10000); 
     } catch {
       toast.error(`No se pudo contactar con el servidor`, { id: toastId });
     }

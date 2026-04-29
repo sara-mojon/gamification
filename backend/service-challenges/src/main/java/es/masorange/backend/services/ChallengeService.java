@@ -19,6 +19,7 @@ import org.slf4j.LoggerFactory;
 import org.slf4j.Logger;
 import org.springframework.web.reactive.function.client.WebClient;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import es.masorange.backend.model.*;
@@ -33,6 +34,9 @@ public class ChallengeService {
     private final ChallengeRepository challengeRepository;
     private final UserSubmissionRepository userSubmissionRepository;
     private final OllamaTaskService ollamaTaskService;
+    private final CodeExecutionService codeExecutionService;
+    private final GamificationClientService gamificationClientService;
+    private final ObjectMapper objectMapper;
 
     private final Map<Long, String> aiTaskStatus = new ConcurrentHashMap<>();
 
@@ -43,11 +47,15 @@ public class ChallengeService {
 
     public ChallengeService(WebClient.Builder webClientBuilder, ChallengeRepository challengeRepository,
             UserSubmissionRepository userSubmissionRepository,
-            OllamaTaskService ollamaTaskService) {
+            OllamaTaskService ollamaTaskService, CodeExecutionService codeExecutionService,
+            GamificationClientService gamificationClientService, ObjectMapper objectMapper) {
         this.webClient = webClientBuilder.baseUrl("https://www.codewars.com/api/v1").build();
         this.challengeRepository = challengeRepository;
         this.userSubmissionRepository = userSubmissionRepository;
         this.ollamaTaskService = ollamaTaskService;
+        this.codeExecutionService = codeExecutionService;
+        this.gamificationClientService = gamificationClientService;
+        this.objectMapper = objectMapper;
     }
 
     public CodeWarsChallengeDTO importChallengeFromCodeWars(String challengeId) {
@@ -164,20 +172,27 @@ public class ChallengeService {
             if (dto.getTags() != null && !dto.getTags().isEmpty()) {
                 existing.setTags(dto.getTags());
             }
+
             if (dto.getTests() != null) {
-                existing.getTests().clear();
-                dto.getTests().forEach((lenguaje, script) -> {
-                    if (script != null && !script.trim().isEmpty()) {
-                        existing.getTests().put(lenguaje, script);
-                    }
-                });
+                boolean tieneContenidoNuevo = dto.getTests().values().stream()
+                        .anyMatch(s -> s != null && !s.trim().isEmpty());
+
+                if (tieneContenidoNuevo) {
+                    log.info("Actualizando tests para el reto {}:", id);
+                    existing.getTests().clear();
+                    dto.getTests().forEach((lang, script) -> {
+                        if (script != null && !script.trim().isEmpty()) {
+                            existing.getTests().put(lang, script);
+                        }
+                    });
+                } else {
+                    log.info("Ignorando actualización de tests para el reto {} (sin cambios detectados).", id);
+                }
             }
 
             if (existing.getTests() == null || existing.getTests().isEmpty()) {
                 if (Boolean.TRUE.equals(existing.getIsVisible())) {
-                    log.info(
-                            "Cambiando automáticamente la visibilidad a false (borrador) porque el reto ID {} se ha quedado sin tests.",
-                            id);
+                    log.info("Cambiando automáticamente la visibilidad a false porque el ID {} no tiene tests.", id);
                     existing.setIsVisible(false);
                 }
             }
@@ -187,7 +202,7 @@ public class ChallengeService {
             return new BasicResponseDTO("Challenge actualizado correctamente", "200");
 
         }).orElseGet(() -> {
-            log.warn("Fallo de actualización: No se encontró el challenge con ID {}", id);
+            log.warn("Fallo de actualización: No se encontró el ID {}", id);
             return new BasicResponseDTO("No encontrado", "404");
         });
     }
@@ -458,6 +473,55 @@ public class ChallengeService {
             }
         }
         return "desconocido";
+    }
+
+    public String processSubmission(Long challengeId, String keycloakId, String language, String sourceCode)
+            throws Exception {
+        log.info("Procesando submit del usuario {} para el reto {}", keycloakId, challengeId);
+
+        // 1. Ejecutar en Judge0 (Solo pasamos código, nada de tokens)
+        String rawResult = codeExecutionService.executeSolution(challengeId, language, sourceCode);
+
+        // 2. Comprobar si ha ganado leyendo el JSON que nos escupe Judge0
+        if (rawResult != null && rawResult.contains("||JSON_RESULT||")) {
+            String jsonPart = rawResult.substring(rawResult.indexOf("||JSON_RESULT||") + 15);
+            JsonNode resultNode = objectMapper.readTree(jsonPart);
+
+            int failedTests = resultNode.path("failed").asInt(-1);
+
+            // 3. ¡Victoria total!
+            if (failedTests == 0) {
+                handleVictory(challengeId, keycloakId, language);
+            }
+        }
+
+        return rawResult;
+    }
+
+    private void handleVictory(Long challengeId, String keycloakId, String language) {
+        log.info("🏆 Usuario {} ha pasado todos los tests del reto {}", keycloakId, challengeId);
+
+        boolean alreadySolved = userSubmissionRepository.existsByKeycloakIdAndChallengeId(keycloakId, challengeId);
+
+        if (!alreadySolved) {
+            Challenge challenge = challengeRepository.findById(challengeId)
+                    .orElseThrow(() -> new RuntimeException("Reto no encontrado"));
+
+            // 1. Avisar a Gamificación para que reparta los puntos según el nivel (Rank)
+            log.info("Notificando victoria a Gamificación (Rank: {})", challenge.getRank());
+            gamificationClientService.notifyChallengeSolved(keycloakId, challenge.getRank());
+
+            // 2. Guardar en Base de Datos que ya lo ha resuelto
+            UserSubmission submission = new UserSubmission();
+            submission.setKeycloakId(keycloakId);
+            submission.setChallenge(challenge);
+            submission.setLanguage(language);
+            userSubmissionRepository.save(submission);
+
+            log.info("✅ Puntos enviados y reto marcado como resuelto.");
+        } else {
+            log.info("ℹ️ El usuario {} ya había resuelto este reto. No se otorgan puntos extra.", keycloakId);
+        }
     }
 
 }

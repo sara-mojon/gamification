@@ -126,6 +126,10 @@ public class UserService {
         return userRepository.findByKeycloakId(keycloakId);
     }
 
+    public Optional<User> getUserBySlackId(String slackId) {
+        return userRepository.findBySlackId(slackId);
+    }
+
     public BasicResponseDTO deleteUser(Long id) {
         if (id == null) {
             return new BasicResponseDTO("El ID es inválido", "400");
@@ -223,6 +227,28 @@ public class UserService {
                 userRepository.save(user);
                 log.info("Usuario {} vinculado con Slack ID: {}", username, slackId);
             }
+        });
+    }
+
+    public void addPointsToUser(String keycloakId, int points) {
+        userRepository.findByKeycloakId(keycloakId).ifPresent(user -> {
+            int currentScore = user.getScore() != null ? user.getScore() : 0;
+            user.setScore(currentScore + points);
+
+            LocalDate today = LocalDate.now();
+            LocalDate lastSolve = user.getLastSolveDate();
+            int currentStreak = user.getCurrentStreak() != null ? user.getCurrentStreak() : 0;
+
+            if (lastSolve == null || lastSolve.isBefore(today.minusDays(1))) {
+                user.setCurrentStreak(1);
+            } else if (lastSolve.isEqual(today.minusDays(1))) {
+                user.setCurrentStreak(currentStreak + 1);
+            }
+            user.setLastSolveDate(today);
+
+            userRepository.save(user);
+            log.info("🏆 {} px añadidos a {}. Total: {} px | Racha: {} 🔥",
+                    points, user.getUsername(), user.getScore(), user.getCurrentStreak());
         });
     }
 }

@@ -13,6 +13,7 @@ import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -92,6 +93,21 @@ public class UserController {
             userService.vincularSlackSiEsNecesario(username, slackId);
         }
 
+        return ResponseEntity.ok().build();
+    }
+
+    @GetMapping("/slack/{slackId}/keycloak")
+    public ResponseEntity<String> getKeycloakIdBySlackId(@PathVariable String slackId) {
+        return userService.getUserBySlackId(slackId)
+                .map(user -> ResponseEntity.ok(user.getKeycloakId()))
+                .orElse(ResponseEntity.ok(slackId));
+    }
+
+    @PostMapping("/{keycloakId}/add-points")
+    public ResponseEntity<Void> addPoints(
+            @PathVariable String keycloakId,
+            @RequestParam int points) {
+        userService.addPointsToUser(keycloakId, points);
         return ResponseEntity.ok().build();
     }
 }

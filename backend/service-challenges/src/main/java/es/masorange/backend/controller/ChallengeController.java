@@ -153,13 +153,84 @@ public class ChallengeController {
         return ResponseEntity.ok(challengeService.getUserHistory(keycloakId));
     }
 
-    // --
+    /*
+     * @PostMapping("/{id}/submit")
+     * public ResponseEntity<String> submitSolution(
+     * 
+     * @PathVariable Long id,
+     * 
+     * @RequestBody Map<String, String> payload,
+     * 
+     * @RequestHeader("Authorization") String token) { // Recogemos el token del
+     * usuario
+     * 
+     * String language = payload.get("language");
+     * String sourceCode = payload.get("sourceCode");
+     * 
+     * try {
+     * // 1. Ejecutar en Judge0 (Devuelve el String ||JSON_RESULT||{...})
+     * String rawResult = codeExecutionService.executeSolution(id, language,
+     * sourceCode);
+     * 
+     * // 2. Parsear el resultado para ver si ha ganado
+     * if (rawResult.contains("||JSON_RESULT||")) {
+     * String jsonPart = rawResult.substring(rawResult.indexOf("||JSON_RESULT||") +
+     * 15);
+     * ObjectMapper mapper = new ObjectMapper();
+     * JsonNode resultNode = mapper.readTree(jsonPart);
+     * 
+     * int failedTests = resultNode.path("failed").asInt(-1);
+     * 
+     * // 3. ¡Misión Cumplida! Todos los tests pasaron
+     * if (failedTests == 0) {
+     * 
+     * // TODO: 1. Comprobar en BBDD si este usuario ya había resuelto este reto
+     * // (para no darle puntos infinitos)
+     * 
+     * // boolean alreadySolved =
+     * // solutionRepository.existsByUserIdAndChallengeId(userId, id);
+     * 
+     * // TODO: 2. Si no lo había resuelto, llamar al microservicio de Gamificación
+     * 
+     * // if (!alreadySolved) {
+     * // WebClient.create(gamificationUrl)
+     * // .post()
+     * // .uri("/api/points/add")
+     * // .header("Authorization", token)
+     * // .bodyValue(Map.of("points", 10, "reason", "Challenge Completed"))
+     * // .retrieve()
+     * // .toBodilessEntity()
+     * // .block();
+     * 
+     * // 3. Guardar en BBDD que ya lo ha resuelto
+     * // solutionRepository.save(new Solution(userId, id));
+     * // }
+     * 
+     * // TODO: 4. Revisar si hay sorpassos en el Top 3 de este reto y avisar por
+     * Slack
+     * // si es así
+     * // slackIntegrationService.comprobarSorpassoPodio();
+     * 
+     * log.info("🏆 El usuario ha superado el reto {} con éxito.", id);
+     * }
+     * }
+     * 
+     * // 4. Devolver el resultado a React (sea 200 OK, habiendo ganado operdido)
+     * return ResponseEntity.ok(rawResult);
+     * 
+     * } catch (Exception e) {
+     * log.error("Error procesando submit", e);
+     * return ResponseEntity.internalServerError().body("Error interno: " +
+     * e.getMessage());
+     * }
+     * }
+     */
 
-    // TODO: borrar
-    @Deprecated
-    @PostMapping("/{id}/submit/deprecated")
-    public ResponseEntity<String> submitSolutionDeprecated(@PathVariable Long id,
-            @RequestBody Map<String, String> payload) {
+    @PostMapping("/{id}/submit")
+    public ResponseEntity<String> submitSolution(
+            @PathVariable Long id,
+            @RequestBody Map<String, String> payload,
+            @RequestHeader("Authorization") String authHeader) {
 
         String language = payload.get("language");
         String sourceCode = payload.get("sourceCode");
@@ -169,73 +240,11 @@ public class ChallengeController {
         }
 
         try {
-            // Devolverá la cadena ||JSON_RESULT||{...} que tu frontend ya sabe parsear
-            String result = codeExecutionService.executeSolution(id, language, sourceCode);
+            String keycloakId = challengeService.extractKeycloakIdFromToken(authHeader);
+            String result = challengeService.processSubmission(id, keycloakId, language, sourceCode);
             return ResponseEntity.ok(result);
         } catch (Exception e) {
-            return ResponseEntity.internalServerError().body(e.getMessage());
-        }
-    }
-
-    @PostMapping("/{id}/submit")
-    public ResponseEntity<String> submitSolution(
-            @PathVariable Long id,
-            @RequestBody Map<String, String> payload,
-            @RequestHeader("Authorization") String token) { // Recogemos el token del usuario
-
-        String language = payload.get("language");
-        String sourceCode = payload.get("sourceCode");
-
-        try {
-            // 1. Ejecutar en Judge0 (Devuelve el String ||JSON_RESULT||{...})
-            String rawResult = codeExecutionService.executeSolution(id, language, sourceCode);
-
-            // 2. Parsear el resultado para ver si ha ganado
-            if (rawResult.contains("||JSON_RESULT||")) {
-                String jsonPart = rawResult.substring(rawResult.indexOf("||JSON_RESULT||") + 15);
-                ObjectMapper mapper = new ObjectMapper();
-                JsonNode resultNode = mapper.readTree(jsonPart);
-
-                int failedTests = resultNode.path("failed").asInt(-1);
-
-                // 3. ¡Misión Cumplida! Todos los tests pasaron
-                if (failedTests == 0) {
-
-                    // TODO: 1. Comprobar en BBDD si este usuario ya había resuelto este reto
-                    // (para no darle puntos infinitos)
-
-                    // boolean alreadySolved =
-                    // solutionRepository.existsByUserIdAndChallengeId(userId, id);
-
-                    // TODO: 2. Si no lo había resuelto, llamar al microservicio de Gamificación
-
-                    // if (!alreadySolved) {
-                    // WebClient.create(gamificationUrl)
-                    // .post()
-                    // .uri("/api/points/add")
-                    // .header("Authorization", token)
-                    // .bodyValue(Map.of("points", 10, "reason", "Challenge Completed"))
-                    // .retrieve()
-                    // .toBodilessEntity()
-                    // .block();
-
-                    // 3. Guardar en BBDD que ya lo ha resuelto
-                    // solutionRepository.save(new Solution(userId, id));
-                    // }
-
-                    // TODO: 4. Revisar si hay sorpassos en el Top 3 de este reto y avisar por Slack
-                    // si es así
-                    // slackIntegrationService.comprobarSorpassoPodio();
-
-                    log.info("🏆 El usuario ha superado el reto {} con éxito.", id);
-                }
-            }
-
-            // 4. Devolver el resultado a React (sea 200 OK, habiendo ganado operdido)
-            return ResponseEntity.ok(rawResult);
-
-        } catch (Exception e) {
-            log.error("Error procesando submit", e);
+            log.error("Error en el endpoint de submit para el reto {}", id, e);
             return ResponseEntity.internalServerError().body("Error interno: " + e.getMessage());
         }
     }

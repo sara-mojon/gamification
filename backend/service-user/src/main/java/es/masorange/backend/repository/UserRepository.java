@@ -17,6 +17,8 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     Optional<User> findByKeycloakId(String keycloakId);
 
+    Optional<User> findBySlackId(String slackId);
+
     List<User> findTop3ByOrderByScoreDesc();
 
     int countByScoreGreaterThan(Integer score);

@@ -1,6 +1,7 @@
 package es.masorange.backend.services;
 
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HexFormat;
 import java.util.List;
@@ -47,7 +48,7 @@ public class SlackIntegrationService {
     @Value("${frontend.url:http://localhost:5173}")
     private String frontendUrl;
 
-    private List<String> ultimoPodioConocido = new java.util.ArrayList<>();
+    private List<String> ultimoPodioConocido = new ArrayList<>();
 
     private final ChallengeRepository challengeRepository;
     private final UserClientService userClientService;
@@ -577,6 +578,7 @@ public class SlackIntegrationService {
     // ==========================================
     // SORPASSOS
     // ==========================================
+    @Scheduled(cron = "0 0 16 * * MON-FRI")
     public void comprobarSorpassoPodio() {
         String USER_SERVICE_URL = "http://service-user:8080/api/users/ranking/top3";
         RestTemplate restTemplate = new RestTemplate();
@@ -618,7 +620,8 @@ public class SlackIntegrationService {
                                 .append(u.get("score")).append(" px\n");
                     }
 
-                    mensajeSorpasso.append("\n_¿Quién será el siguiente en dar la campanada?_ 👀");
+                    mensajeSorpasso
+                            .append("\n_Nadie está a salvo en el Top 3... ¿Quién dará la próxima gran sorpresa?_ 👀🍿");
                     this.enviarMensajeASlack(this.canalId, mensajeSorpasso.toString());
                     ultimoPodioConocido = podioActualNombres;
                 }
