@@ -1,7 +1,10 @@
 package es.masorange.backend.services;
 
+import java.util.ArrayList;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
+import java.util.List;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -10,6 +13,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.reactive.function.client.WebClient;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+import java.time.Duration;
 import es.masorange.backend.model.Challenge;
 import es.masorange.backend.model.OllamaRequest;
 import es.masorange.backend.model.OllamaResponse;
@@ -129,6 +136,75 @@ public class OllamaTaskService {
         }
 
         return "";
+    }
+
+    public Challenge generateChallengeWithAI() {
+        log.info("Solicitando a Ollama la generación de un nuevo reto desde cero...");
+
+        Optional<PromptTemplate> templateOpt = promptTemplateRepository
+                .findByLanguageAndActiveTrue("generate_challenge");
+        if (templateOpt.isEmpty()) {
+            log.error("No se encontró un prompt template activo para 'generate_challenge'.");
+            throw new RuntimeException("Error: Plantilla de generación de retos no configurada.");
+        }
+
+        String prompt = templateOpt.get().getTemplateContent();
+
+        Map<String, Object> options = Map.of(
+                "temperature", 0.8,
+                "num_predict", 3000,
+                "num_ctx", 4096);
+
+        OllamaRequest requestBody = new OllamaRequest("qwen2.5-coder:7b", prompt, false, options);
+        WebClient ollamaClient = WebClient.builder().baseUrl(ollamaUrl).build();
+
+        try {
+            OllamaResponse respuestaOllama = ollamaClient.post()
+                    .uri("/api/generate")
+                    .header("Content-Type", "application/json")
+                    .bodyValue(requestBody)
+                    .retrieve()
+                    .bodyToMono(OllamaResponse.class)
+                    .timeout(Duration.ofMinutes(2)) // Le damos margen para pensar todo el JSON
+                    .block();
+
+            if (respuestaOllama != null && respuestaOllama.response() != null) {
+                String jsonSalida = cleanMarkdown(respuestaOllama.response());
+                ObjectMapper mapper = new ObjectMapper();
+                JsonNode nodo = mapper.readTree(jsonSalida);
+
+                Challenge nuevoReto = new Challenge();
+                nuevoReto.setName(nodo.get("name").asText());
+                nuevoReto.setDescription(nodo.get("description").asText());
+                nuevoReto.setRank(nodo.get("rank").asInt());
+
+                List<String> tags = new ArrayList<>();
+                if (nodo.has("tags")) {
+                    nodo.get("tags").forEach(t -> tags.add(t.asText()));
+                }
+                nuevoReto.setTags(tags);
+
+                if (nodo.has("python_solution")) {
+                    nuevoReto.getSolutions().put("python", nodo.get("python_solution").asText());
+                }
+
+                nuevoReto.setIdCodeWars("AI-" + UUID.randomUUID().toString().substring(0, 8));
+
+                String slugGenerado = nuevoReto.getName().toLowerCase()
+                        .replaceAll("[^a-z0-9\\s-]", "")
+                        .replaceAll("\\s+", "-");
+                nuevoReto.setSlug(slugGenerado + "-" + UUID.randomUUID().toString().substring(0, 4));
+
+                nuevoReto.setIsVisible(false);
+
+                log.info("¡Reto generado por IA creado con éxito! Nombre: {}", nuevoReto.getName());
+                return challengeRepository.save(nuevoReto);
+            }
+        } catch (Exception e) {
+            log.error("Fallo al generar un reto completo con Ollama: {}", e.getMessage(), e);
+            throw new RuntimeException("Fallo al generar el reto. Revisa los logs.");
+        }
+        return null;
     }
 
     private String cleanMarkdown(String text) {

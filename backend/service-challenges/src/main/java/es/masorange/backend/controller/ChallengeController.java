@@ -1,5 +1,6 @@
 package es.masorange.backend.controller;
 
+import es.masorange.backend.services.OllamaTaskService;
 import java.util.List;
 import java.util.Map;
 
@@ -39,10 +40,13 @@ public class ChallengeController {
 
     private final ChallengeService challengeService;
     private final CodeExecutionService codeExecutionService;
+    private final OllamaTaskService ollamaTaskService;
 
-    public ChallengeController(ChallengeService challengeService, CodeExecutionService codeExecutionService) {
+    public ChallengeController(ChallengeService challengeService, CodeExecutionService codeExecutionService,
+            OllamaTaskService ollamaTaskService) {
         this.challengeService = challengeService;
         this.codeExecutionService = codeExecutionService;
+        this.ollamaTaskService = ollamaTaskService;
     }
 
     @PostMapping("/import/{id}")
@@ -56,8 +60,8 @@ public class ChallengeController {
     }
 
     @PostMapping("/generate/challenge")
-    public BasicResponseDTO generateChallenge() {
-        return challengeService.generateChallenge();
+    public Challenge generateChallenge() {
+        return ollamaTaskService.generateChallengeWithAI();
     }
 
     @PostMapping("/generate/test/{id}")

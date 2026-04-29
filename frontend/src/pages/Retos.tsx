@@ -264,21 +264,27 @@ export default function Retos() {
   };
 
   const ejecutarGenerarReto = async () => {
+    setModalGenerarReto(false);
+
+    const toastId = toast.loading(`🧠 Qwen2.5 está inventando un nuevo reto...`, {
+      style: { backgroundColor: '#1e1e1e', color: '#fff', fontSize: '0.95rem' }
+    });
+
     try {
-      const response = await fetch(`${baseUrlChallenges}/api/challenges/generate/challenge}`, {
+      const response = await fetch(`${baseUrlChallenges}/api/challenges/generate/challenge`, {
         method: "POST",
         headers: { 'Authorization': `Bearer ${token}` }
       });
+
       if (response.ok) {
-        setRetos(retos.filter(r => r.id !== modalEliminar.id));
-        setModalGenerarReto(false);
+        const nuevoRetoBackend = await response.json();
+        toast.success(`¡Reto "${nuevoRetoBackend.name}" generado!`, { id: toastId, duration: 5000, icon: '✨' });
+        setTimeout(() => { window.location.reload(); }, 1500); 
       } else {
-        setModalGenerarReto(false);
-        setModalAviso({ abierto: true, titulo: "Error", mensaje: "El servidor no pudo generar el reto.", recargar: false });
+        toast.error("El servidor no pudo generar el reto.", { id: toastId });
       }
     } catch {
-      setModalGenerarReto(false);
-      setModalAviso({ abierto: true, titulo: "Error", mensaje: "Error de conexión al intentar generar el reto.", recargar: false });
+      toast.error("Fallo de conexión al generar el reto.", { id: toastId });
     }
   };
 
