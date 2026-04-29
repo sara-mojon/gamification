@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -55,13 +56,31 @@ public class ChallengeController {
     }
 
     @PostMapping("/generate/challenge")
-    public String generateChallenge() {
-        return new String();
+    public BasicResponseDTO generateChallenge() {
+        return challengeService.generateChallenge();
     }
 
     @PostMapping("/generate/test/{id}")
-    public BasicResponseDTO generateTestForChallenge(@PathVariable Long id) {
-        return challengeService.generateTestsWithAI(id);
+    public ResponseEntity<BasicResponseDTO> generateTestForChallenge(@PathVariable Long id) {
+        BasicResponseDTO response = challengeService.startAITestGeneration(id);
+        if ("404".equals(response.status())) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
+        }
+        return ResponseEntity.status(HttpStatus.ACCEPTED).body(response);
+    }
+
+    @GetMapping("/generate/test/{id}/status")
+    public ResponseEntity<Map<String, Object>> getAiTestGenerationStatus(@PathVariable Long id) {
+        String status = challengeService.getAiTaskStatus(id);
+
+        if ("COMPLETADO".equals(status)) {
+            Map<String, String> testsGenerados = challengeService.getChallengeTestsSafely(id);
+
+            return ResponseEntity.ok(Map.of(
+                    "status", "COMPLETADO",
+                    "tests", testsGenerados));
+        }
+        return ResponseEntity.ok(Map.of("status", status));
     }
 
     @PostMapping("/manual")

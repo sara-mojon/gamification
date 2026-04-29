@@ -264,8 +264,22 @@ export default function Retos() {
   };
 
   const ejecutarGenerarReto = async () => {
-    setModalAviso({ abierto: true, titulo: "Próximamente", mensaje: "¡La IA construirá un reto desde cero para ti muy pronto!", recargar: false });
-    setModalGenerarReto(false);
+    try {
+      const response = await fetch(`${baseUrlChallenges}/api/challenges/generate/challenge}`, {
+        method: "POST",
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (response.ok) {
+        setRetos(retos.filter(r => r.id !== modalEliminar.id));
+        setModalGenerarReto(false);
+      } else {
+        setModalGenerarReto(false);
+        setModalAviso({ abierto: true, titulo: "Error", mensaje: "El servidor no pudo generar el reto.", recargar: false });
+      }
+    } catch {
+      setModalGenerarReto(false);
+      setModalAviso({ abierto: true, titulo: "Error", mensaje: "Error de conexión al intentar generar el reto.", recargar: false });
+    }
   };
 
   const ejecutarEliminar = async () => {
@@ -295,7 +309,7 @@ export default function Retos() {
       setModalAviso({ 
         abierto: true, 
         titulo: "Publicación Bloqueada", 
-        mensaje: "No puedes guardar este reto como Público. Debes añadir al menos un test oculto para que los usuarios puedan validar su código.",
+        mensaje: "No puedes guardar este reto como Público. Debes añadir al menos un test para que los usuarios puedan validar su código.",
         recargar: false 
       });
       return;
@@ -407,23 +421,52 @@ export default function Retos() {
     }
   };
 
-  const generarTestsConIA = (retoId: string, tituloReto: string) => {
+  const generarTestsConIA = async (retoId: string, tituloReto: string) => {
     if (!token) return;
-    const peticionIA = fetch(`${baseUrlChallenges}/api/challenges/generate/test/${retoId}`, {
-      method: "POST", headers: { 'Authorization': `Bearer ${token}` }
-    }).then(async (res) => {
-      if (!res.ok) throw new Error("Fallo en IA");
-      const data = await res.json();
-      setRetos(retosActuales => retosActuales.map(r => r.id === retoId ? { ...r, tieneTests: true, tests: data.tests || r.tests } : r));
-      return data;
+
+    const toastId = toast.loading(`🧠 Iniciando conexión con IA...`, {
+      style: { backgroundColor: '#1e1e1e', color: '#fff', fontSize: '0.95rem' }
     });
 
-    toast.promise(peticionIA, {
-        loading: `🧠 Qwen2.5 está escribiendo tests para "${tituloReto}"...`,
-        success: `¡Tests generados para "${tituloReto}"! `,
-        error: `Error generando tests para "${tituloReto}" `
-      }, { style: { backgroundColor: '#1e1e1e', color: '#fff', fontSize: '0.95rem' }, success: { duration: 5000, icon: '✅' } }
-    );
+    try {
+      const responseInicio = await fetch(`${baseUrlChallenges}/api/challenges/generate/test/${retoId}`, {
+        method: "POST", 
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (!responseInicio.ok) throw new Error("Fallo al iniciar IA");
+
+      const intervalId = setInterval(async () => {
+        try {
+          const resStatus = await fetch(`${baseUrlChallenges}/api/challenges/generate/test/${retoId}/status`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+
+          if (resStatus.ok) {
+            const data = await resStatus.json();
+
+            if (data.status === "COMPLETADO") {
+              clearInterval(intervalId); 
+              setRetos(retosActuales => retosActuales.map(r => 
+                r.id === retoId ? { ...r, tieneTests: true, tests: data.tests || r.tests } : r
+              ));
+              toast.success(`¡Tests generados para "${tituloReto}"!`, { id: toastId, duration: 5000, icon: '✅' });
+            } else if (data.status === "ERROR") {
+              clearInterval(intervalId);
+              toast.error(`Hubo un error en la generación para "${tituloReto}"`, { id: toastId });
+            } else if (data.status.startsWith("PROCESANDO_")) {
+              const lenguajeReal = data.status.split('_')[1]; 
+              const nombreBonito = lenguajeReal.charAt(0) + lenguajeReal.slice(1).toLowerCase();
+              toast.loading(`🧠 Qwen2.5 escribiendo tests en ${nombreBonito} para "${tituloReto}"...`, { id: toastId });
+            }
+          }
+        } catch (error) {
+          console.warn("Fallo temporal de red...", error);
+        }
+      }, 5000); 
+    } catch {
+      toast.error(`No se pudo contactar con el servidor`, { id: toastId });
+    }
   };
 
   const abrirModalEditar = (reto: FrontendChallenge) => {
@@ -653,9 +696,9 @@ export default function Retos() {
         <div style={overlayStyle}>
           <div style={modalStyle}>
             <button style={btnCerrarStyle} onClick={() => setModalGenerarReto(false)}><X size={24} /></button>
-            <h2 style={{ marginTop: 0, color: "#673ab7", display: "flex", alignItems: "center", gap: "10px" }}><Wand2 size={24}/> Generar Reto de Cero</h2>
+            <h2 style={{ marginTop: 0, color: "#673ab7", display: "flex", alignItems: "center", gap: "10px" }}><Wand2 size={24}/> Generar Reto</h2>
             <p style={{ fontSize: "1.1rem", color: "#333", lineHeight: "1.5", marginTop: "15px" }}>
-              ¿Deseas que la IA actúe como profesora y construya un reto de programación completamente nuevo y original para tus alumnos?
+              ¿Deseas que la IA actúe como profesora y construya un reto de programación completamente nuevo y original?
             </p>
             <div style={{ display: "flex", gap: "15px", marginTop: "30px", justifyContent: "flex-end" }}>
               <button onClick={() => setModalGenerarReto(false)} style={{ padding: "10px 20px", borderRadius: "6px", border: "1px solid #ddd", background: "white", cursor: "pointer", fontWeight: "bold" }}>Cancelar</button>

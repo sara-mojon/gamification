@@ -8,22 +8,21 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
-import org.springframework.beans.factory.annotation.Value;
-import java.time.format.DateTimeFormatter;
+
+import java.util.concurrent.CompletableFuture;
 import org.apache.poi.ss.usermodel.*;
 import org.slf4j.LoggerFactory;
 import org.slf4j.Logger;
 import org.springframework.web.reactive.function.client.WebClient;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import es.masorange.backend.model.*;
 import es.masorange.backend.repository.ChallengeRepository;
-import es.masorange.backend.repository.PromptTemplateRepository;
 import es.masorange.backend.repository.UserSubmissionRepository;
 
 @Service
@@ -32,18 +31,23 @@ public class ChallengeService {
     private static final Logger log = LoggerFactory.getLogger(ChallengeService.class);
     private final WebClient webClient;
     private final ChallengeRepository challengeRepository;
-    private final PromptTemplateRepository promptTemplateRepository;
     private final UserSubmissionRepository userSubmissionRepository;
+    private final OllamaTaskService ollamaTaskService;
 
-    @Value("${ollama.url:http://localhost:11434}")
-    private String ollamaUrl;
+    private final Map<Long, String> aiTaskStatus = new ConcurrentHashMap<>();
+
+    /*
+     * @Value("${ollama.url:http://localhost:11434}")
+     * private String ollamaUrl;
+     */
 
     public ChallengeService(WebClient.Builder webClientBuilder, ChallengeRepository challengeRepository,
-            PromptTemplateRepository promptTemplateRepository, UserSubmissionRepository userSubmissionRepository) {
+            UserSubmissionRepository userSubmissionRepository,
+            OllamaTaskService ollamaTaskService) {
         this.webClient = webClientBuilder.baseUrl("https://www.codewars.com/api/v1").build();
         this.challengeRepository = challengeRepository;
-        this.promptTemplateRepository = promptTemplateRepository;
         this.userSubmissionRepository = userSubmissionRepository;
+        this.ollamaTaskService = ollamaTaskService;
     }
 
     public CodeWarsChallengeDTO importChallengeFromCodeWars(String challengeId) {
@@ -304,52 +308,35 @@ public class ChallengeService {
         return new BasicResponseDTO(mensajeFinal.toString().trim(), "200");
     }
 
-    public BasicResponseDTO generateTestsWithAI(Long id) {
-        log.info("Solicitada generación de tests con IA para el challenge ID: {}", id);
-        Optional<Challenge> challengeOpt = challengeRepository.findById(id);
+    public BasicResponseDTO generateChallenge() {
+        log.info("Solicitada generación de reto con IA.");
+        return new BasicResponseDTO("Funcionalidad de generación automática de retos con IA en desarrollo.", "200");
+    }
 
-        if (challengeOpt.isEmpty()) {
+    public String getAiTaskStatus(Long challengeId) {
+        return aiTaskStatus.getOrDefault(challengeId, "NO_INICIADO");
+    }
+
+    public BasicResponseDTO startAITestGeneration(Long id) {
+        log.info("Solicitada generación de tests con IA para el challenge ID: {}", id);
+
+        if (!challengeRepository.existsById(id)) {
             log.warn("Abortando generación de IA: No se encontró el challenge con ID: {}", id);
             return new BasicResponseDTO("No se encontró el challenge con id: " + id, "404");
         }
+        aiTaskStatus.put(id, "PROCESANDO");
 
-        Challenge challenge = challengeOpt.get();
-        String[] lenguajesObjetivo = { "javascript", "python", "java", "c" };
+        CompletableFuture.runAsync(() -> {
+            ollamaTaskService.generateTestsWithAIAsync(id, aiTaskStatus);
+        });
 
-        for (String lang : lenguajesObjetivo) {
-            log.info("🧠 Ollama trabajando: Generando test para '{}' en [{}] ...", challenge.getName(), lang);
-            try {
-                String testGenerado = callOllamaToGenerateTest(challenge, lang);
+        return new BasicResponseDTO("Generación de tests iniciada en segundo plano", "202");
+    }
 
-                if (testGenerado != null && !testGenerado.trim().isEmpty()) {
-
-                    // --- CORTE POR ZONA DE CONTENCIÓN ---
-                    String markerJava = "// === END OF TEST CLASS ===";
-                    if (lang.equals("java") && testGenerado.contains(markerJava)) {
-                        // Cortamos todo lo que haya desde el marcador hacia abajo
-                        testGenerado = testGenerado.substring(0, testGenerado.indexOf(markerJava)).trim();
-                    }
-
-                    String markerC = "// === END OF TEST FILE ===";
-                    if (lang.equals("c") && testGenerado.contains(markerC)) {
-                        // Cortamos todo lo que haya desde el marcador hacia abajo
-                        testGenerado = testGenerado.substring(0, testGenerado.indexOf(markerC)).trim();
-                    }
-
-                    challenge.getTests().put(lang, testGenerado);
-                    challengeRepository.save(challenge);
-                    log.info("Test para [{}] generado y guardado correctamente", lang);
-                } else {
-                    log.warn("Ollama devolvió un test vacío para [{}]", lang);
-                }
-
-            } catch (Exception e) {
-                log.error("Error grave generando test en [{}]: {}", lang, e.getMessage(), e);
-            }
-        }
-
-        log.info("Flujo de generación de tests con IA finalizado para el challenge ID: {}", id);
-        return new BasicResponseDTO("Tests generados correctamente.", "200");
+    public Map<String, String> getChallengeTestsSafely(Long id) {
+        return challengeRepository.findByIdWithTests(id)
+                .map(Challenge::getTests)
+                .orElse(Map.of());
     }
 
     public BasicResponseDTO createManualChallenge(Challenge challengeDto) {
@@ -383,66 +370,6 @@ public class ChallengeService {
             log.error("Error al guardar el reto manual: {}", e.getMessage());
             return new BasicResponseDTO("Error interno del servidor al guardar el reto.", "500");
         }
-    }
-
-    private String callOllamaToGenerateTest(Challenge challenge, String language) {
-        // 1. Buscamos el prompt en la base de datos
-        Optional<PromptTemplate> templateOpt = promptTemplateRepository.findByLanguageAndActiveTrue(language);
-
-        if (templateOpt.isEmpty()) {
-            log.error("No se encontró un prompt template activo para el lenguaje: {}", language);
-            return "";
-        }
-
-        // 2. Reemplazamos la variable {DESCRIPTION} por la descripción real del reto
-        String prompt = templateOpt.get().getTemplateContent().replace("{DESCRIPTION}", challenge.getDescription());
-
-        // 3. Configuramos Opciones (BAJA TEMPERATURA = CÓDIGO MÁS ESTRICTO)
-        Map<String, Object> options = Map.of(
-                "temperature", 0.4,
-                "num_predict", 2048,
-                "num_ctx", 8192,
-                "top_k", 40,
-                "top_p", 0.9,
-                "repeat_penalty", 1.1);
-
-        // 4. Creamos la petición enviando las opciones
-        OllamaRequest requestBody = new OllamaRequest("qwen2.5-coder:7b", prompt, false, options);
-        WebClient ollamaClient = WebClient.builder().baseUrl(ollamaUrl).build();
-
-        try {
-            OllamaResponse respuestaOllama = ollamaClient.post()
-                    .uri("/api/generate")
-                    .header("Content-Type", "application/json")
-                    .bodyValue(requestBody)
-                    .retrieve()
-                    .bodyToMono(OllamaResponse.class)
-                    .block();
-
-            if (respuestaOllama != null && respuestaOllama.response() != null) {
-                return cleanMarkdown(respuestaOllama.response());
-            }
-        } catch (Exception e) {
-            log.error("Fallo HTTP al conectar con el servidor Ollama: {}", e.getMessage(), e);
-        }
-
-        return "";
-    }
-
-    private String cleanMarkdown(String text) {
-        if (text == null)
-            return "";
-        String cleaned = text.trim();
-        if (cleaned.startsWith("```")) {
-            int firstNewLine = cleaned.indexOf('\n');
-            if (firstNewLine != -1) {
-                cleaned = cleaned.substring(firstNewLine + 1);
-            }
-            if (cleaned.endsWith("```")) {
-                cleaned = cleaned.substring(0, cleaned.length() - 3).trim();
-            }
-        }
-        return cleaned;
     }
 
     public long countSolvedChallenges(String keycloakId) {
