@@ -129,7 +129,7 @@ export default function Retos() {
               : [`${retoBackend.rank} kyu`, "Algoritmos"];
 
             const diccionarioTests = retoBackend.tests || {};
-            const tieneTests = Object.keys(diccionarioTests).length > 0;
+            const tieneTests = Object.values(diccionarioTests).some(script => script && script.trim() !== "");
 
             return {
               id: retoBackend.id,

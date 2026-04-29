@@ -164,8 +164,13 @@ public class ChallengeService {
             if (dto.getTags() != null && !dto.getTags().isEmpty()) {
                 existing.setTags(dto.getTags());
             }
-            if (dto.getTests() != null && !dto.getTests().isEmpty()) {
-                existing.setTests(dto.getTests());
+            if (dto.getTests() != null) {
+                existing.getTests().clear();
+                dto.getTests().forEach((lenguaje, script) -> {
+                    if (script != null && !script.trim().isEmpty()) {
+                        existing.getTests().put(lenguaje, script);
+                    }
+                });
             }
 
             challengeRepository.save(existing);
