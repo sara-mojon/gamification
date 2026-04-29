@@ -6,6 +6,7 @@ import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
@@ -18,7 +19,6 @@ import org.springframework.web.client.RestTemplate;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-
 import org.springframework.http.ResponseEntity;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
@@ -50,15 +50,21 @@ public class SlackIntegrationService {
     private List<String> ultimoPodioConocido = new java.util.ArrayList<>();
 
     private final ChallengeRepository challengeRepository;
+    private final UserClientService userClientService;
+    private final OllamaTaskService ollamaTaskService;
 
-    public SlackIntegrationService(ChallengeRepository challengeRepository) {
+    public SlackIntegrationService(ChallengeRepository challengeRepository, UserClientService userClientService,
+            OllamaTaskService ollamaTaskService) {
         this.challengeRepository = challengeRepository;
+        this.userClientService = userClientService;
+        this.ollamaTaskService = ollamaTaskService;
     }
 
     // ==========================================
     // PROCESAMIENTO DE COMANDOS
     // ==========================================
-    public Map<String, Object> processCommand(String command, String userName, String userId, String text) {
+    public Map<String, Object> processCommand(String command, String userName, String userId, String text,
+            String responseUrl) {
         notificarVinculacionAServiceUser(userName, userId);
 
         log.info("Comando recibido: {} ejecutado por @{}", command, userName);
@@ -189,8 +195,51 @@ public class SlackIntegrationService {
                 break;
 
             case "/hint":
+                String hintTextRaw = text.trim();
+
+                if (hintTextRaw.isEmpty()) {
+                    response.put("response_type", "ephemeral");
+                    response.put("text",
+                            "⚠️ *¡Error!* Necesito saber para qué reto quieres la pista.\n💡 *Ejemplo:* `/hint 15`");
+                    break;
+                }
+
+                Long challengeId;
+                try {
+                    challengeId = Long.parseLong(hintTextRaw);
+                } catch (NumberFormatException e) {
+                    response.put("response_type", "ephemeral");
+                    response.put("text",
+                            "⚠️ *¡Error!* El identificador del reto debe ser un número.\n💡 *Ejemplo:* `/hint 15`");
+                    break;
+                }
+
                 response.put("response_type", "ephemeral");
-                response.put("text", "🤖 Conectando con la IA para tu pista...");
+                response.put("text", "🤖 Analizando el código del reto " + challengeId + "\n" +
+                        "... Consultando con la IA ⏳");
+
+                // 3. Lanzamos a Ollama a trabajar en segundo plano
+                CompletableFuture.runAsync(() -> {
+                    try {
+                        String hint = ollamaTaskService.generateHintForChallenge(challengeId);
+
+                        Map<String, Object> delayedResponse = new HashMap<>();
+                        delayedResponse.put("response_type", "ephemeral");
+                        delayedResponse.put("text", "💡 *Pista para el reto " + challengeId + ":*\n> " + hint);
+
+                        RestTemplate hintRestTemplate = new RestTemplate();
+                        hintRestTemplate.postForEntity(responseUrl, delayedResponse, String.class);
+
+                    } catch (Exception e) {
+                        log.error("Fallo al enviar la pista a Slack: {}", e.getMessage());
+                        Map<String, Object> errorResponse = new HashMap<>();
+                        errorResponse.put("response_type", "ephemeral");
+                        errorResponse.put("text",
+                                "Lo siento <@" + userId + ">, la IA está descansando y no pudo generar la pista.");
+
+                        new RestTemplate().postForEntity(responseUrl, errorResponse, String.class);
+                    }
+                });
                 break;
 
             case "/info":
@@ -205,6 +254,7 @@ public class SlackIntegrationService {
                         "2. Resuélvelo en la app y gana puntos.\n" +
                         "3. Consulta tu posición en el ranking con `/rank`.\n" +
                         "4. Desafía a tus amigos con `/duel @usuario`.\n\n" +
+                        "5. Pide pistas con `/hint` si te quedas atascado.\n\n" +
                         "💡 *Consejo:* Cuantos más retos resuelvas, más subirás en la clasificación.");
                 break;
 
@@ -363,8 +413,8 @@ public class SlackIntegrationService {
                 textSection.put("type", "section");
                 Map<String, String> textContent = new HashMap<>();
                 textContent.put("type", "mrkdwn");
-                textContent.put("text", "⚔️ *¡HAS SIDO DESAFIADO!* ⚔️\nEl usuario <@" + idRetador
-                        + "> te ha retado a un duelo de código.\n¿Aceptas el reto? Prepárate ...");
+                textContent.put("text", "⚔️ *¡Nuevo Duelo de Código!* ⚔️\n<@" + idRetador
+                        + "> te ha desafiado oficialmente.\n👉 Revisa tus mensajes directos con el bot para aceptar y empezar.");
                 textSection.put("text", textContent);
 
                 // Bloque 2: Los botones
@@ -459,12 +509,12 @@ public class SlackIntegrationService {
                             "¡Que empiece la batalla de código!";
                     this.enviarMensajeASlack(this.canalId, mensajeArena);
 
-                    Optional<Challenge> retoOpt = challengeRepository.findRandomChallenge();
-                    // En el futuro cambiamos esto por un método específico que busque retos no
-                    // resueltos por ninguno de los dos usuarios, para evitar repetir retos ya
-                    // conocidos
-                    // challengeRepository.findRandomUnsolvedChallengeForUsers(idRetador,
-                    // userIdClic)
+                    String keycloakRetador = userClientService.getKeycloakId(idRetador);
+                    String keycloakDesafiado = userClientService.getKeycloakId(userIdClic);
+
+                    Optional<Challenge> retoOpt = challengeRepository.findRandomUnsolvedChallengeForUsers(
+                            keycloakRetador,
+                            keycloakDesafiado);
                     String infoRetoCompartido;
 
                     if (retoOpt.isPresent()) {

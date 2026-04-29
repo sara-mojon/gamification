@@ -77,9 +77,10 @@ public class SlackController {
             @RequestParam("command") String command,
             @RequestParam("user_name") String userName,
             @RequestParam("user_id") String userId,
-            @RequestParam(value = "text", defaultValue = "") String text) {
+            @RequestParam(value = "text", defaultValue = "") String text,
+            @RequestParam(value = "response_url", required = false) String responseUrl) {
 
-        return slackService.processCommand(command, userName, userId, text);
+        return slackService.processCommand(command, userName, userId, text, responseUrl);
     }
 
     // ==========================================================

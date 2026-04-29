@@ -138,6 +138,53 @@ public class OllamaTaskService {
         return "";
     }
 
+    public String generateHintForChallenge(Long challengeId) {
+        log.info("Solicitando pista a Ollama para el reto ID: {}", challengeId);
+
+        Optional<Challenge> challengeOpt = challengeRepository.findById(challengeId);
+        if (challengeOpt.isEmpty()) {
+            log.warn("No se encontró el reto para generar la pista.");
+            return "Error: No se encontró el reto especificado.";
+        }
+
+        Challenge challenge = challengeOpt.get();
+        Optional<PromptTemplate> templateOpt = promptTemplateRepository.findByLanguageAndActiveTrue("hint");
+
+        if (templateOpt.isEmpty()) {
+            log.error("No se encontró un prompt template activo para generar pistas (language='hint').");
+            return "Error: El administrador aún no ha configurado las pistas.";
+        }
+
+        String prompt = templateOpt.get().getTemplateContent().replace("{DESCRIPTION}", challenge.getDescription());
+
+        Map<String, Object> options = Map.of(
+                "temperature", 0.7,
+                "num_predict", 500,
+                "num_ctx", 4096);
+
+        OllamaRequest requestBody = new OllamaRequest("qwen2.5-coder:7b", prompt, false, options);
+        WebClient ollamaClient = WebClient.builder().baseUrl(ollamaUrl).build();
+
+        try {
+            OllamaResponse respuestaOllama = ollamaClient.post()
+                    .uri("/api/generate")
+                    .header("Content-Type", "application/json")
+                    .bodyValue(requestBody)
+                    .retrieve()
+                    .bodyToMono(OllamaResponse.class)
+                    .timeout(Duration.ofSeconds(45))
+                    .block();
+
+            if (respuestaOllama != null && respuestaOllama.response() != null) {
+                return respuestaOllama.response().trim();
+            }
+        } catch (Exception e) {
+            log.error("Fallo al generar pista con Ollama: {}", e.getMessage());
+            return "Lo siento, tu mentor IA está descansando ahora mismo. ¡Sigue intentándolo por tu cuenta!";
+        }
+        return "No se pudo generar la pista en este momento.";
+    }
+
     public Challenge generateChallengeWithAI() {
         log.info("Solicitando a Ollama la generación de un nuevo reto desde cero...");
 
