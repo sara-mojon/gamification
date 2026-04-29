@@ -302,18 +302,17 @@ export default function Retos() {
   };
 
   const ejecutarEditar = async () => {
-    const tieneTests = Object.keys(formData.tests || {}).length > 0;
-    
-    if (formData.isVisible && !tieneTests) {
-      setModalEditar({ abierto: false, id: "" });
-      setModalAviso({ 
-        abierto: true, 
-        titulo: "Publicación Bloqueada", 
-        mensaje: "No puedes guardar este reto como Público. Debes añadir al menos un test para que los usuarios puedan validar su código.",
-        recargar: false 
+    const testsLimpios: Record<string, string> = {};
+    if (formData.tests) {
+      Object.entries(formData.tests).forEach(([lang, script]) => {
+        if (script && script.trim() !== "") {
+          testsLimpios[lang] = script;
+        }
       });
-      return;
     }
+
+    const tieneTests = Object.keys(testsLimpios).length > 0;
+    const visibilidadFinal = tieneTests ? formData.isVisible : false;
 
     try {
       const tagsArray = formData.tags.split(',').map(tag => tag.trim()).filter(tag => tag !== "");
@@ -322,12 +321,10 @@ export default function Retos() {
         name: formData.name,
         description: formData.description,
         rank: formData.rank,
-        isVisible: formData.isVisible,
-        tags: tagsArray
+        isVisible: visibilidadFinal,
+        tags: tagsArray,
+        tests: testsLimpios
       };
-      if (formData.tests && Object.keys(formData.tests).length > 0) {
-        payload.tests = formData.tests;
-      }
 
       const response = await fetch(`${baseUrlChallenges}/api/challenges/${modalEditar.id}`, {
         method: "PATCH",
@@ -342,13 +339,27 @@ export default function Retos() {
         const nuevoTiempo = infoDif.tiempo;
 
         setRetos(retos.map(r => r.id === modalEditar.id ? { 
-            ...r, titulo: formData.name, descripcionOriginal: formData.description,
+            ...r, 
+            titulo: formData.name, 
+            descripcionOriginal: formData.description,
             descripcion: formData.description.replace(/<[^>]+>/g, '').substring(0, 150) + "...",
-            rangoRaw: formData.rank, dificultad: nuevaDificultad, colorDificultad: nuevoColor,
-            tiempoEstimado: nuevoTiempo, isVisible: formData.isVisible, etiquetas: tagsArray,
-            tests: payload.tests ? payload.tests : r.tests, tieneTests: payload.tests ? true : r.tieneTests
+            rangoRaw: formData.rank, 
+            dificultad: nuevaDificultad, 
+            colorDificultad: nuevoColor,
+            tiempoEstimado: nuevoTiempo, 
+            isVisible: visibilidadFinal,
+            etiquetas: tagsArray,
+            tests: testsLimpios, 
+            tieneTests: tieneTests 
         } : r));
+        
         setModalEditar({ abierto: false, id: "" });
+        if (formData.isVisible && !tieneTests) {
+          toast('Reto guardado. Se ha puesto en "Borrador" automáticamente por no tener tests.', {
+            icon: '⚠️',
+            style: { background: '#fff3e0', color: '#e65100' }
+          });
+        }
       } else {
         setModalEditar({ abierto: false, id: "" });
         setModalAviso({ abierto: true, titulo: "Error", mensaje: "El servidor no pudo guardar los cambios.", recargar: false });

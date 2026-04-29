@@ -173,6 +173,15 @@ public class ChallengeService {
                 });
             }
 
+            if (existing.getTests() == null || existing.getTests().isEmpty()) {
+                if (Boolean.TRUE.equals(existing.getIsVisible())) {
+                    log.info(
+                            "Cambiando automáticamente la visibilidad a false (borrador) porque el reto ID {} se ha quedado sin tests.",
+                            id);
+                    existing.setIsVisible(false);
+                }
+            }
+
             challengeRepository.save(existing);
             log.info("✅ Challenge con ID {} actualizado correctamente", id);
             return new BasicResponseDTO("Challenge actualizado correctamente", "200");
