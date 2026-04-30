@@ -4,6 +4,8 @@ import jakarta.persistence.*;
 import lombok.*;
 import java.time.LocalDate;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 @Entity
 @Table(name = "users")
 @Getter
@@ -40,5 +42,9 @@ public class User {
 
     @Column(name = "slack_id")
     private String slackId;
+
+    @Column(name = "completed_challenges")
+    @JsonProperty("retosCompletados")
+    private Integer completedChallenges = 0;
 
 }

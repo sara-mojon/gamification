@@ -235,6 +235,9 @@ public class UserService {
             int currentScore = user.getScore() != null ? user.getScore() : 0;
             user.setScore(currentScore + points);
 
+            int currentChallenges = user.getCompletedChallenges() == null ? 0 : user.getCompletedChallenges();
+            user.setCompletedChallenges(currentChallenges + 1);
+
             LocalDate today = LocalDate.now();
             LocalDate lastSolve = user.getLastSolveDate();
             int currentStreak = user.getCurrentStreak() != null ? user.getCurrentStreak() : 0;
