@@ -69,21 +69,7 @@ export default function Perfil() {
           console.error("No se pudo obtener el ranking", error);
         }
 
-        // 3. Pedimos el contador de retos resueltos
-        let totalResueltos = 0;
-        try {
-          const statsRes = await fetch(`${baseUrlChallenges}/api/challenges/me/stats`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-          });
-          if (statsRes.ok) {
-            const statsData = await statsRes.json();
-            totalResueltos = statsData.retosCompletados;
-          }
-        } catch (error) { 
-          console.error("No se pudieron obtener las estadísticas de retos:", error); 
-        }
-
-        // 4. Pedimos el historial de actividad real
+        // 3. Pedimos el historial de actividad real
         try {
           const historyRes = await fetch(`${baseUrlChallenges}/api/challenges/me/history`, {
             headers: { 'Authorization': `Bearer ${token}` }
@@ -102,7 +88,7 @@ export default function Perfil() {
 
           setEstadisticas({
             puntos: misDatos.score || 0,
-            retosCompletados: totalResueltos,
+            retosCompletados: misDatos.retosCompletados || 0,
             rachaDias: misDatos.currentStreak || 0,
             rangoGlobal: posicionRanking
           });

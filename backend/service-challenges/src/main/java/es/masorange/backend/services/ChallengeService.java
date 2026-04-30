@@ -24,6 +24,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import es.masorange.backend.model.*;
 import es.masorange.backend.repository.ChallengeRepository;
+import es.masorange.backend.repository.DuelRepository;
 import es.masorange.backend.repository.UserSubmissionRepository;
 
 @Service
@@ -36,25 +37,25 @@ public class ChallengeService {
     private final OllamaTaskService ollamaTaskService;
     private final CodeExecutionService codeExecutionService;
     private final GamificationClientService gamificationClientService;
+    private final DuelRepository duelRepository;
+    private final SlackIntegrationService slackService;
     private final ObjectMapper objectMapper;
 
     private final Map<Long, String> aiTaskStatus = new ConcurrentHashMap<>();
 
-    /*
-     * @Value("${ollama.url:http://localhost:11434}")
-     * private String ollamaUrl;
-     */
-
     public ChallengeService(WebClient.Builder webClientBuilder, ChallengeRepository challengeRepository,
             UserSubmissionRepository userSubmissionRepository,
             OllamaTaskService ollamaTaskService, CodeExecutionService codeExecutionService,
-            GamificationClientService gamificationClientService, ObjectMapper objectMapper) {
+            GamificationClientService gamificationClientService, DuelRepository duelRepository,
+            SlackIntegrationService slackService, ObjectMapper objectMapper) {
         this.webClient = webClientBuilder.baseUrl("https://www.codewars.com/api/v1").build();
         this.challengeRepository = challengeRepository;
         this.userSubmissionRepository = userSubmissionRepository;
         this.ollamaTaskService = ollamaTaskService;
         this.codeExecutionService = codeExecutionService;
         this.gamificationClientService = gamificationClientService;
+        this.duelRepository = duelRepository;
+        this.slackService = slackService;
         this.objectMapper = objectMapper;
     }
 
@@ -401,10 +402,6 @@ public class ChallengeService {
         }
     }
 
-    public long countSolvedChallenges(String keycloakId) {
-        return userSubmissionRepository.countByKeycloakId(keycloakId);
-    }
-
     // Método para el historial detallado
     public List<ChallengeHistoryDTO> getUserHistory(String keycloakId) {
         List<UserSubmission> submissions = userSubmissionRepository.findByKeycloakIdOrderBySolvedAtDesc(keycloakId);
@@ -519,6 +516,29 @@ public class ChallengeService {
             userSubmissionRepository.save(submission);
 
             log.info("✅ Puntos enviados y reto marcado como resuelto.");
+
+            /*
+             * log.info("🔍 Comprobando si el usuario {} estaba en un duelo activo...",
+             * keycloakId);
+             * 
+             * duelRepository.findActiveDuelForUserAndChallenge(keycloakId, challengeId)
+             * .ifPresent(duel -> {
+             * log.info("¡DUELO COMPLETADO! El usuario {} ha ganado el duelo {}.",
+             * keycloakId, duel.getId());
+             * 
+             * duel.setStatus("FINISHED");
+             * duel.setWinnerId(keycloakId);
+             * duelRepository.save(duel);
+             * 
+             * String perdedorId = duel.getRetadorId().equals(keycloakId) ?
+             * duel.getOponenteId()
+             * : duel.getRetadorId();
+             * 
+             * slackService.anunciarGanadorDuelo(duel.getCanalSlackId(), keycloakId,
+             * perdedorId);
+             * });
+             */
+
         } else {
             log.info("ℹ️ El usuario {} ya había resuelto este reto. No se otorgan puntos extra.", keycloakId);
         }
