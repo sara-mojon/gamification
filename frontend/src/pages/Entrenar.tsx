@@ -6,6 +6,8 @@ import { useAuth } from "react-oidc-context";
 import Editor from "@monaco-editor/react";
 import { ChevronLeft, Play, CheckCircle } from "lucide-react";
 import ReactMarkdown from "react-markdown";
+import Confetti from "react-confetti";
+import { useWindowSize } from "react-use";
 
 // --- TIPOS ---
 interface Reto {
@@ -114,7 +116,8 @@ export default function Entrenar() {
   const navigate = useNavigate();
   const auth = useAuth();
   const token = auth.user?.access_token;
-  
+  const { width, height } = useWindowSize();
+
   // --- ESTADOS ---
   const [retoActual, setRetoActual] = useState<Reto | null>(null);
   const [cargando, setCargando] = useState(true);
@@ -125,6 +128,7 @@ export default function Entrenar() {
   
   const [submitting, setSubmitting] = useState(false); // <-- AQUÍ AÑADIMOS EL ESTADO
   const [result, setResult] = useState<ParsedResult | null>(null); // Estado para guardar el resultado de Judge0
+  const [mostrarConfeti, setMostrarConfeti] = useState(false);
 
   // --- CONFIG URIs ---
   const baseUrlUsers = import.meta.env.VITE_USER_URL || 'http://localhost:8080';
@@ -176,11 +180,16 @@ export default function Entrenar() {
     cargarDatos();
   }, [id, token, baseUrlUsers, baseUrlChallenges]);
 
+  useEffect(() => {
+    return () => setMostrarConfeti(false);
+  }, []);
+
   const cambiarLenguaje = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const nuevoLenguaje = e.target.value as "javascript" | "python" | "java" | "c";
     setLenguaje(nuevoLenguaje);
     setCodigo(plantillasCodigo[nuevoLenguaje]); 
     setResult(null); // Limpiamos resultados al cambiar de lenguaje
+    setMostrarConfeti(false);
   };
 
   const ejecutarCodigo = async () => {
@@ -188,6 +197,7 @@ export default function Entrenar() {
     
     setSubmitting(true);
     setResult(null); // Limpiamos resultados anteriores
+    setMostrarConfeti(false);
     
     try {
       const response = await fetch(`${baseUrlChallenges}/api/challenges/${retoActual.id}/submit`, {
@@ -207,7 +217,16 @@ export default function Entrenar() {
       const rawOutput = await response.text(); // String puro de Spring Boot
       const parsed = parseTestResult(rawOutput); 
       setResult(parsed); 
-
+      if (parsed.status === 'success') {
+          setMostrarConfeti(true);
+          setRetoActual(prev => {
+              if (!prev) return prev;
+              return { ...prev, isSolved: true };
+          });
+          setTimeout(() => {
+              setMostrarConfeti(false);
+          }, 5000); 
+      }
     } catch (err) {
       console.error(err);
       setResult({
@@ -238,6 +257,16 @@ export default function Entrenar() {
   }
 
   return (
+    <>
+    {mostrarConfeti && (
+        <Confetti 
+          width={width} 
+          height={height} 
+          recycle={false} // Hace que el confeti caiga una vez y no se genere infinitamente
+          numberOfPieces={500} 
+          style={{ zIndex: 9999, position: 'fixed', top: 0, left: 0 }}
+        />
+    )}
     <div style={{ display: "grid", gridTemplateColumns: "0.75fr 1fr", height: "calc(100vh - 65px)", margin: "-40px", overflow: "hidden" }}>
       
       {/* PANEL IZQUIERDO (Descripción y Resultados) */}
@@ -260,7 +289,8 @@ export default function Entrenar() {
             <span style={{ 
               backgroundColor: "#e8f5e9", color: "#2e7d32", border: "1px solid #4caf50",
               padding: "3px 10px", borderRadius: "20px", fontSize: "0.8rem", fontWeight: "bold", 
-              display: "flex", alignItems: "center" 
+              display: "flex", alignItems: "center",
+              transition: "all 0.5s ease"
             }}>
               <CheckCircle size={14} style={{ marginRight: "5px" }} /> Completado
             </span>
@@ -280,7 +310,8 @@ export default function Entrenar() {
             <div style={{ 
                 backgroundColor: result?.status === 'success' ? '#143118' : (result?.status === 'error' ? '#3d1616' : '#1e1e1e'), 
                 color: "#fff", borderRadius: "8px", padding: "20px", minHeight: "150px", 
-                border: `1px solid ${result?.status === 'success' ? '#2e7d32' : (result?.status === 'error' ? '#c62828' : '#333')}`
+                border: `1px solid ${result?.status === 'success' ? '#2e7d32' : (result?.status === 'error' ? '#c62828' : '#333')}`,
+                transition: "background-color 0.3s ease"
             }}>
                 <h4 style={{ margin: "0 0 10px 0", color: "#ddd", fontSize: "0.9rem", textTransform: "uppercase", fontWeight: "bold" }}>
                     {result ? result.title : "Resultado de las pruebas"}
@@ -350,5 +381,6 @@ export default function Entrenar() {
 
       </div>
     </div>
+  </>
   );
 }
