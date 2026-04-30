@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useAuth } from "react-oidc-context";
-import { User, Calendar, Code, Star, Activity, AlertTriangle, Settings } from "lucide-react";
+import { User, Calendar, Code, Star, Activity, AlertTriangle, Settings, ChevronLeft, ChevronRight } from "lucide-react";
 import toast from 'react-hot-toast';
 
 interface HistorialReto {
@@ -39,7 +39,8 @@ export default function Perfil() {
   });
   
   const [historial, setHistorial] = useState<HistorialReto[]>([]);
-  const [mostrarTodoHistorial, setMostrarTodoHistorial] = useState(false);
+  const [paginaActividad, setPaginaActividad] = useState(0); 
+  const [totalPaginasActividad, setTotalPaginasActividad] = useState(1);
   const [lenguajePreferido, setLenguajePreferido] = useState("java"); 
   const [userId, setUserId] = useState<number | null>(null);
   const [cargando, setCargando] = useState(true);
@@ -50,12 +51,10 @@ export default function Perfil() {
       if (!token) return;
 
       try {
-        // 1. Pedimos los datos básicos del usuario
         const response = await fetch(`${baseUrlUser}/api/users/me`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
 
-        // 2. Pedimos su posición en el ranking
         let posicionRanking: number | string = "-";
         try {
           const rankResponse = await fetch(`${baseUrlUser}/api/users/ranking/${username}`, {
@@ -67,19 +66,6 @@ export default function Perfil() {
           }
         } catch (error) {
           console.error("No se pudo obtener el ranking", error);
-        }
-
-        // 3. Pedimos el historial de actividad real
-        try {
-          const historyRes = await fetch(`${baseUrlChallenges}/api/challenges/me/history`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-          });
-          if (historyRes.ok) {
-            const historyData = await historyRes.json();
-            setHistorial(historyData); // Guardamos la lista real
-          }
-        } catch (error) { 
-          console.error("No se pudo obtener el historial de retos:", error); 
         }
 
         if (response.ok) {
@@ -105,7 +91,27 @@ export default function Perfil() {
     };
 
     cargarMiPerfil();
-  }, [token, baseUrlUser, baseUrlChallenges, username]);
+  }, [token, baseUrlUser, username]);
+
+  useEffect(() => {
+    const cargarHistorial = async () => {
+      if (!token) return;
+      try {
+        const historyRes = await fetch(`${baseUrlChallenges}/api/challenges/me/history?page=${paginaActividad}&size=6`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (historyRes.ok) {
+          const historyData = await historyRes.json();
+          setHistorial(historyData.content); 
+          setTotalPaginasActividad(historyData.totalPages);
+        }
+      } catch (error) { 
+        console.error("No se pudo obtener el historial de retos:", error); 
+      }
+    };
+
+    cargarHistorial();
+  }, [token, baseUrlChallenges, paginaActividad]);
 
   const cambiarLenguaje = async (e: React.ChangeEvent<HTMLSelectElement>) => {
     const nuevoLenguaje = e.target.value;
@@ -157,8 +163,6 @@ export default function Perfil() {
   if (cargando) {
     return <div style={{ textAlign: "center", padding: "50px", color: "#666" }}>Cargando tu perfil...</div>;
   }
-
-  const historialVisible = mostrarTodoHistorial ? historial : historial.slice(0, 3);
 
   return (
     <>
@@ -279,7 +283,7 @@ export default function Perfil() {
 
             <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
               {historial.length > 0 ? (
-                historialVisible.map((item) => (
+                historial.map((item) => (
                   <div key={item.id} style={{ 
                     display: "flex", justifyContent: "space-between", alignItems: "center", 
                     padding: "20px", borderRadius: "8px", border: "1px solid #eee",
@@ -318,20 +322,27 @@ export default function Perfil() {
               )}
             </div>
 
-            {/* Lógica del botón de Ver Todo */}
-            {historial.length > 3 && (
-              <button 
-                onClick={() => setMostrarTodoHistorial(!mostrarTodoHistorial)}
-                style={{ 
-                  width: "100%", padding: "15px", marginTop: "20px", borderRadius: "8px", 
-                  backgroundColor: "#f9f9f9", border: "1px solid #ddd", color: "#666", 
-                  fontWeight: "bold", cursor: "pointer", transition: "background-color 0.2s"
-                }}
-                onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#eee"}
-                onMouseOut={(e) => e.currentTarget.style.backgroundColor = "#f9f9f9"}
-              >
-                {mostrarTodoHistorial ? "Ver menos" : "Ver todo el historial"}
-              </button>
+            {/* CONTROLES DE PAGINACIÓN */}
+            {totalPaginasActividad > 1 && (
+              <div style={{ display: "flex", justifyContent: "center", alignItems: "center", marginTop: "25px", gap: "20px" }}>
+                <button 
+                  onClick={() => setPaginaActividad(p => Math.max(0, p - 1))} 
+                  disabled={paginaActividad === 0} 
+                  style={{ display: "flex", alignItems: "center", padding: "10px 15px", borderRadius: "6px", border: "1px solid #ddd", backgroundColor: paginaActividad === 0 ? "#f5f5f5" : "white", color: paginaActividad === 0 ? "#aaa" : "#333", cursor: paginaActividad === 0 ? "not-allowed" : "pointer", transition: "0.2s" }}
+                >
+                  <ChevronLeft size={18} style={{ marginRight: "5px" }} /> Anterior
+                </button>
+                <span style={{ fontSize: "1rem", color: "#555", fontWeight: "500" }}>
+                  Página {paginaActividad + 1} de {totalPaginasActividad}
+                </span>
+                <button 
+                  onClick={() => setPaginaActividad(p => Math.min(totalPaginasActividad - 1, p + 1))} 
+                  disabled={paginaActividad === totalPaginasActividad - 1} 
+                  style={{ display: "flex", alignItems: "center", padding: "10px 15px", borderRadius: "6px", border: "1px solid #ddd", backgroundColor: paginaActividad === totalPaginasActividad - 1 ? "#f5f5f5" : "white", color: paginaActividad === totalPaginasActividad - 1 ? "#aaa" : "#333", cursor: paginaActividad === totalPaginasActividad - 1 ? "not-allowed" : "pointer", transition: "0.2s" }}
+                >
+                  Siguiente <ChevronRight size={18} style={{ marginLeft: "5px" }} />
+                </button>
+              </div>
             )}
 
           </div>

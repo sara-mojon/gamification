@@ -12,7 +12,9 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
-
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.PageRequest;
 import java.util.concurrent.CompletableFuture;
 import org.apache.poi.ss.usermodel.*;
 import org.slf4j.LoggerFactory;
@@ -402,14 +404,15 @@ public class ChallengeService {
         }
     }
 
-    // Método para el historial detallado
-    public List<ChallengeHistoryDTO> getUserHistory(String keycloakId) {
-        List<UserSubmission> submissions = userSubmissionRepository.findByKeycloakIdOrderBySolvedAtDesc(keycloakId);
+    public Page<ChallengeHistoryDTO> getUserHistory(String keycloakId, int page, int size) {
 
-        return submissions.stream().map(sub -> {
+        Pageable pageable = PageRequest.of(page, size);
+        Page<UserSubmission> submissionPage = userSubmissionRepository.findByKeycloakIdOrderBySolvedAtDesc(keycloakId,
+                pageable);
+
+        return submissionPage.map(sub -> {
             Challenge challenge = sub.getChallenge();
 
-            // Lógica local temporal (Sustituye lo que haría Gamification)
             String dificultad;
             int puntos;
             switch (challenge.getRank() != null ? challenge.getRank() : 8) {
@@ -452,7 +455,7 @@ public class ChallengeService {
                     fechaStr,
                     puntos,
                     dificultad);
-        }).toList();
+        });
     }
 
     public String extractKeycloakIdFromToken(String authHeader) {

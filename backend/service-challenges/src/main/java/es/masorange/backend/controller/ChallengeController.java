@@ -15,8 +15,10 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.data.domain.Page;
 
 import org.slf4j.Logger;
 
@@ -25,8 +27,6 @@ import es.masorange.backend.model.Challenge;
 import es.masorange.backend.model.ChallengeHistoryDTO;
 import es.masorange.backend.model.CodeWarsChallengeDTO;
 import es.masorange.backend.services.ChallengeService;
-
-import org.springframework.web.bind.annotation.RequestParam;
 
 @RestController
 @RequestMapping("/api/challenges")
@@ -135,9 +135,13 @@ public class ChallengeController {
     }
 
     @GetMapping("/me/history")
-    public ResponseEntity<List<ChallengeHistoryDTO>> getMyHistory(@RequestHeader("Authorization") String authHeader) {
+    public ResponseEntity<Page<ChallengeHistoryDTO>> getMyHistory(
+            @RequestHeader("Authorization") String authHeader,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "6") int size) {
+
         String keycloakId = challengeService.extractKeycloakIdFromToken(authHeader);
-        return ResponseEntity.ok(challengeService.getUserHistory(keycloakId));
+        return ResponseEntity.ok(challengeService.getUserHistory(keycloakId, page, size));
     }
 
     @PostMapping("/{id}/submit")
