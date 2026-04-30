@@ -1,6 +1,6 @@
 // frontend/src/pages/Retos.tsx
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Terminal, Clock, ChevronRight, Search, Filter, ChevronLeft, Wand2, Pencil, Trash2, X, Eye, EyeOff, AlertTriangle, Download, Loader2, CheckCircle2, Plus, Code2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "react-oidc-context";
@@ -53,6 +53,11 @@ export default function Retos() {
   const navigate = useNavigate();
   const auth = useAuth();
   const token = auth.user?.access_token;
+
+  const tokenRef = useRef(token);
+  useEffect(() => {
+    tokenRef.current = token;
+  }, [token]);
 
   // --- VARIABLES DE ENTORNO DINÁMICAS ---
   const baseUrlUsers = import.meta.env.VITE_USER_URL || 'http://localhost:8080';
@@ -439,7 +444,7 @@ export default function Retos() {
   };
 
   const generarTestsConIA = async (retoId: string, tituloReto: string) => {
-    if (!token) return;
+    if (!tokenRef.current) return;
 
     const toastId = toast.loading(`🧠 Iniciando conexión con IA...`, {
       style: { backgroundColor: '#1e1e1e', color: '#fff', fontSize: '0.95rem' }
@@ -448,7 +453,7 @@ export default function Retos() {
     try {
       const responseInicio = await fetch(`${baseUrlChallenges}/api/challenges/generate/test/${retoId}`, {
         method: "POST", 
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: { 'Authorization': `Bearer ${tokenRef.current}` } 
       });
 
       if (!responseInicio.ok) throw new Error("Fallo al iniciar IA");
@@ -456,7 +461,7 @@ export default function Retos() {
       const intervalId = setInterval(async () => {
         try {
           const resStatus = await fetch(`${baseUrlChallenges}/api/challenges/generate/test/${retoId}/status`, {
-            headers: { 'Authorization': `Bearer ${token}` }
+            headers: { 'Authorization': `Bearer ${tokenRef.current}` }
           });
 
           if (resStatus.ok) {
@@ -475,6 +480,12 @@ export default function Retos() {
               const lenguajeReal = data.status.split('_')[1]; 
               const nombreBonito = lenguajeReal.charAt(0) + lenguajeReal.slice(1).toLowerCase();
               toast.loading(`🧠 Qwen2.5 escribiendo tests en ${nombreBonito} para "${tituloReto}"...`, { id: toastId });
+            }
+          } else {
+            console.error(`Error en status: ${resStatus.status}`);
+            if (resStatus.status === 401 || resStatus.status === 403) {
+                clearInterval(intervalId);
+                toast.error("Sesión expirada. Por favor, recarga la página.", { id: toastId });
             }
           }
         } catch (error) {
