@@ -100,10 +100,24 @@ public class ChallengeController {
     }
 
     @GetMapping
-    public ResponseEntity<List<Challenge>> getAllChallenges(
-            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+    public ResponseEntity<Page<Challenge>> getAllChallenges(
+            @RequestHeader(value = "Authorization", required = false) String authHeader,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String dificultad,
+            @RequestParam(required = false) String etiqueta,
+            @RequestParam(required = false) String tiempo,
+            @RequestParam(required = false) String estadoResuelto,
+            @RequestParam(required = false) String testFiltro,
+            @RequestParam(required = false) String visibilidad,
+            @RequestParam(defaultValue = "false") boolean isAdmin) {
+
         String keycloakId = challengeService.extractKeycloakIdFromToken(authHeader);
-        List<Challenge> retos = challengeService.getAllChallengesForUser(keycloakId);
+        Page<Challenge> retos = challengeService.getAllChallengesWithFilters(
+                keycloakId, page, size, search, dificultad, etiqueta,
+                tiempo, estadoResuelto, testFiltro, visibilidad, isAdmin);
+
         return ResponseEntity.ok(retos);
     }
 

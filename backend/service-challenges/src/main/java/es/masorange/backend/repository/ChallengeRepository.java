@@ -1,7 +1,7 @@
 package es.masorange.backend.repository;
 
 import java.util.Optional;
-
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -10,7 +10,7 @@ import org.springframework.stereotype.Repository;
 import es.masorange.backend.model.Challenge;
 
 @Repository
-public interface ChallengeRepository extends JpaRepository<Challenge, Long> {
+public interface ChallengeRepository extends JpaRepository<Challenge, Long>, JpaSpecificationExecutor<Challenge> {
 
     @Query(value = "SELECT * FROM challenges WHERE is_visible = true ORDER BY RANDOM() LIMIT 1", nativeQuery = true)
     Optional<Challenge> findRandomChallenge();

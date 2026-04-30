@@ -39,15 +39,17 @@ interface FrontendChallenge {
 
 const obtenerInfoDificultad = (rank: number) => {
   switch (rank) {
-    case 8: return { dificultad: "Muy Fácil", color: "#4caf50", tiempo: 10 };   // Verde oscuro
-    case 7: return { dificultad: "Fácil", color: "#8bc34a", tiempo: 15 };       // Verde claro
-    case 6: return { dificultad: "Normal", color: "#ffc107", tiempo: 20 };      // Amarillo
-    case 5: return { dificultad: "Normal-Avanzado", color: "#ff9800", tiempo: 30 }; // Naranja
-    case 4: return { dificultad: "Difícil", color: "#f44336", tiempo: 45 };     // Rojo
-    case 3: return { dificultad: "Muy Difícil", color: "#d32f2f", tiempo: 60 }; // Rojo oscuro
-    default: return { dificultad: "Desconocido", color: "#9e9e9e", tiempo: 20 }; // Gris (Fallback)
+    case 8: return { dificultad: "Muy Fácil", color: "#4caf50", tiempo: 10 };   
+    case 7: return { dificultad: "Fácil", color: "#8bc34a", tiempo: 15 };       
+    case 6: return { dificultad: "Normal", color: "#ffc107", tiempo: 20 };      
+    case 5: return { dificultad: "Normal-Avanzado", color: "#ff9800", tiempo: 30 }; 
+    case 4: return { dificultad: "Difícil", color: "#f44336", tiempo: 45 };     
+    case 3: return { dificultad: "Muy Difícil", color: "#d32f2f", tiempo: 60 }; 
+    default: return { dificultad: "Desconocido", color: "#9e9e9e", tiempo: 20 }; 
   }
 };
+
+const ETIQUETAS_COMUNES = ["Algoritmos", "Matemáticas", "Arrays", "Strings", "Lógica", "Fundamentos", "Estructuras de Datos", "Puzzles"];
 
 export default function Retos() {
   const navigate = useNavigate();
@@ -59,7 +61,6 @@ export default function Retos() {
     tokenRef.current = token;
   }, [token]);
 
-  // --- VARIABLES DE ENTORNO DINÁMICAS ---
   const baseUrlUsers = import.meta.env.VITE_USER_URL || 'http://localhost:8080';
   const baseUrlChallenges = import.meta.env.VITE_CHALLENGES_URL || import.meta.env.VITE_USER_URL || 'http://localhost:8081';
 
@@ -67,7 +68,9 @@ export default function Retos() {
   const [cargando, setCargando] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
 
+  // --- ESTADOS DE FILTROS ---
   const [busqueda, setBusqueda] = useState("");
+  const [busquedaDebounced, setBusquedaDebounced] = useState(""); // NUEVO: Estado para el Debounce
   const [dificultadFiltro, setDificultadFiltro] = useState("Todas");
   const [etiquetaFiltro, setEtiquetaFiltro] = useState("Todas");
   const [tiempoFiltro, setTiempoFiltro] = useState("Todos");
@@ -75,7 +78,9 @@ export default function Retos() {
   const [visibilidadFiltro, setVisibilidadFiltro] = useState("Todos");
   const [estadoResueltoFiltro, setEstadoResueltoFiltro] = useState("Todos");
   
+  // --- PAGINACIÓN ---
   const [paginaActual, setPaginaActual] = useState(1);
+  const [totalPaginasBackend, setTotalPaginasBackend] = useState(1);
 
   const [modalEliminar, setModalEliminar] = useState({ abierto: false, id: "", titulo: "" });
   const [modalGenerar, setModalGenerar] = useState({ abierto: false, id: "", titulo: "" });
@@ -97,6 +102,7 @@ export default function Retos() {
 
   useEffect(() => {
     const comprobarAdmin = async () => {
+      if (!token) return;
       try {
         const res = await fetch(`${baseUrlUsers}/api/users/me`, {
           headers: { 'Authorization': `Bearer ${token}` }
@@ -110,10 +116,41 @@ export default function Retos() {
         console.error("Error al verificar rol de admin");
       }
     };
+    comprobarAdmin();
+  }, [token, baseUrlUsers]);
 
+  useEffect(() => {
+    const manejador = setTimeout(() => {
+      setBusquedaDebounced(busqueda);
+    }, 500);
+
+    return () => {
+      clearTimeout(manejador);
+    };
+  }, [busqueda]);
+
+  useEffect(() => {
     const cargarRetos = async () => {
+      if (!token) return;
+      setCargando(true);
       try {
-        const response = await fetch(`${baseUrlChallenges}/api/challenges`, {
+        const pageParaSpring = paginaActual - 1;
+        
+        const params = new URLSearchParams({
+          page: pageParaSpring.toString(),
+          size: ITEMS_POR_PAGINA.toString(),
+          isAdmin: isAdmin.toString()
+        });
+
+        if (busquedaDebounced) params.append("search", busquedaDebounced);
+        if (dificultadFiltro !== "Todas") params.append("dificultad", dificultadFiltro);
+        if (etiquetaFiltro !== "Todas") params.append("etiqueta", etiquetaFiltro);
+        if (tiempoFiltro !== "Todos") params.append("tiempo", tiempoFiltro);
+        if (estadoResueltoFiltro !== "Todos") params.append("estadoResuelto", estadoResueltoFiltro);
+        if (isAdmin && testFiltro !== "Todos") params.append("testFiltro", testFiltro);
+        if (isAdmin && visibilidadFiltro !== "Todos") params.append("visibilidad", visibilidadFiltro);
+
+        const response = await fetch(`${baseUrlChallenges}/api/challenges?${params.toString()}`, {
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
@@ -121,7 +158,9 @@ export default function Retos() {
         });
 
         if (response.ok) {
-          const datosBackend: BackendChallenge[] = await response.json();
+          const json = await response.json();
+          const datosBackend: BackendChallenge[] = json.content;
+          setTotalPaginasBackend(json.totalPages || 1);
           
           const datosAdaptados = datosBackend.map((retoBackend) => {
             const infoDif = obtenerInfoDificultad(retoBackend.rank);
@@ -161,13 +200,12 @@ export default function Retos() {
       }
     };
 
-    if (token) {
-      comprobarAdmin();
-      cargarRetos();
-    } else if (!auth.isLoading) {
-      setCargando(false);
-    }
-  }, [token, auth.isLoading, baseUrlUsers, baseUrlChallenges]);
+    cargarRetos();
+  }, [
+    token, baseUrlChallenges, paginaActual, isAdmin, 
+    busquedaDebounced, dificultadFiltro, etiquetaFiltro, tiempoFiltro,
+    estadoResueltoFiltro, testFiltro, visibilidadFiltro
+  ]); 
 
   const ejecutarImportar = async () => {
     if (archivoExcel) {
@@ -503,43 +541,7 @@ export default function Retos() {
     setModalEditar({ abierto: true, id: reto.id });
   };
 
-  const todasLasEtiquetas = Array.from(new Set(retos.flatMap(reto => reto.etiquetas)));
-
-  const retosFiltrados = retos.filter((reto) => {
-    if (!isAdmin && !reto.isVisible) return false;
-
-    const coincideTexto = reto.titulo.toLowerCase().includes(busqueda.toLowerCase()) || reto.descripcion.toLowerCase().includes(busqueda.toLowerCase());
-    const coincideDificultad = dificultadFiltro === "Todas" || reto.dificultad === dificultadFiltro;
-    const coincideEtiqueta = etiquetaFiltro === "Todas" || reto.etiquetas.includes(etiquetaFiltro);
-    
-    let coincideTiempo = true;
-    if (tiempoFiltro === "15") coincideTiempo = reto.tiempoEstimado <= 15;
-    if (tiempoFiltro === "30") coincideTiempo = reto.tiempoEstimado <= 30;
-    if (tiempoFiltro === "mas30") coincideTiempo = reto.tiempoEstimado > 30;
-
-    let coincideTests = true;
-    let coincideVisibilidad = true;
-    let coincideResuelto = true;
-
-    if (estadoResueltoFiltro === "Resueltos") coincideResuelto = reto.isSolved;
-    if (estadoResueltoFiltro === "Pendientes") coincideResuelto = !reto.isSolved;
-    
-    if (isAdmin) {
-      if (testFiltro === "Con tests") coincideTests = reto.tieneTests;
-      if (testFiltro === "Sin tests") coincideTests = !reto.tieneTests;
-      if (visibilidadFiltro === "Públicos") coincideVisibilidad = reto.isVisible;
-      if (visibilidadFiltro === "Borradores") coincideVisibilidad = !reto.isVisible;
-    }
-
-    return coincideTexto && coincideDificultad && coincideEtiqueta && coincideTiempo && coincideTests && coincideVisibilidad && coincideResuelto;
-  });
-
-  const totalPaginas = Math.ceil(retosFiltrados.length / ITEMS_POR_PAGINA) || 1;
-  const indiceUltimoItem = paginaActual * ITEMS_POR_PAGINA;
-  const indicePrimerItem = indiceUltimoItem - ITEMS_POR_PAGINA;
-  const retosPaginados = retosFiltrados.slice(indicePrimerItem, indiceUltimoItem);
-
-  if (cargando) {
+  if (cargando && retos.length === 0) {
       return <div style={{ textAlign: "center", padding: "50px", fontSize: "1.2rem", color: "#666" }}>Conectando con la Base de Datos... ⏳</div>;
   }
 
@@ -933,10 +935,12 @@ export default function Retos() {
             <option value="Muy Difícil">Muy Difícil</option>
           </select>
         </div>
+        
         <select value={etiquetaFiltro} onChange={(e) => { setEtiquetaFiltro(e.target.value); setPaginaActual(1); }} style={{ padding: "12px", borderRadius: "6px", border: "1px solid #ddd", fontSize: "1rem", outline: "none", cursor: "pointer", boxSizing: "border-box" }}>
           <option value="Todas">Todas las etiquetas</option>
-          {todasLasEtiquetas.map(tag => <option key={tag} value={tag}>{tag}</option>)}
+          {ETIQUETAS_COMUNES.map(tag => <option key={tag} value={tag}>{tag}</option>)}
         </select>
+        
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
           <Clock size={20} color="#888" />
           <select value={tiempoFiltro} onChange={(e) => { setTiempoFiltro(e.target.value); setPaginaActual(1); }} style={{ padding: "12px", borderRadius: "6px", border: "1px solid #ddd", fontSize: "1rem", outline: "none", cursor: "pointer", boxSizing: "border-box" }}>
@@ -972,10 +976,10 @@ export default function Retos() {
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-        {retosFiltrados.length === 0 ? (
+        {retos.length === 0 && !cargando ? (
           <div style={{ textAlign: "center", padding: "40px", backgroundColor: "white", borderRadius: "10px", color: "#888" }}>No se han encontrado retos con esos filtros.</div>
         ) : (
-          retosPaginados.map((reto) => (
+          retos.map((reto) => (
             <div key={reto.id} style={{ opacity: reto.isVisible ? 1 : 0.6, backgroundColor: "white", borderRadius: "10px", padding: "25px", boxShadow: "0 4px 6px rgba(0,0,0,0.05)", border: "1px solid", borderColor: reto.isVisible ? "#eaeaea" : "#ff9800", display: "flex", justifyContent: "space-between", alignItems: "center", transition: "transform 0.2s, box-shadow 0.2s" }} onMouseOver={(e) => e.currentTarget.style.transform = "translateY(-3px)"} onMouseOut={(e) => e.currentTarget.style.transform = "translateY(0)"}>
               
               <div style={{ flex: 1 }}>
@@ -1030,13 +1034,13 @@ export default function Retos() {
         )}
       </div>
 
-      {totalPaginas > 1 && (
+      {totalPaginasBackend > 1 && (
         <div style={{ display: "flex", justifyContent: "center", alignItems: "center", marginTop: "40px", gap: "20px" }}>
           <button onClick={() => setPaginaActual(p => p - 1)} disabled={paginaActual === 1} style={{ display: "flex", alignItems: "center", padding: "10px 15px", borderRadius: "6px", border: "1px solid #ddd", backgroundColor: paginaActual === 1 ? "#f5f5f5" : "white", color: paginaActual === 1 ? "#aaa" : "#333", cursor: paginaActual === 1 ? "not-allowed" : "pointer" }}>
             <ChevronLeft size={18} style={{ marginRight: "5px" }} /> Anterior
           </button>
-          <span style={{ fontSize: "1rem", color: "#555", fontWeight: "500" }}>Página {paginaActual} de {totalPaginas}</span>
-          <button onClick={() => setPaginaActual(p => p + 1)} disabled={paginaActual === totalPaginas} style={{ display: "flex", alignItems: "center", padding: "10px 15px", borderRadius: "6px", border: "1px solid #ddd", backgroundColor: paginaActual === totalPaginas ? "#f5f5f5" : "white", color: paginaActual === totalPaginas ? "#aaa" : "#333", cursor: paginaActual === totalPaginas ? "not-allowed" : "pointer" }}>
+          <span style={{ fontSize: "1rem", color: "#555", fontWeight: "500" }}>Página {paginaActual} de {totalPaginasBackend}</span>
+          <button onClick={() => setPaginaActual(p => p + 1)} disabled={paginaActual === totalPaginasBackend} style={{ display: "flex", alignItems: "center", padding: "10px 15px", borderRadius: "6px", border: "1px solid #ddd", backgroundColor: paginaActual === totalPaginasBackend ? "#f5f5f5" : "white", color: paginaActual === totalPaginasBackend ? "#aaa" : "#333", cursor: paginaActual === totalPaginasBackend ? "not-allowed" : "pointer" }}>
             Siguiente <ChevronRight size={18} style={{ marginLeft: "5px" }} />
           </button>
         </div>

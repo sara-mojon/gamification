@@ -14,6 +14,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.domain.PageRequest;
 import java.util.concurrent.CompletableFuture;
 import org.apache.poi.ss.usermodel.*;
@@ -26,6 +27,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import es.masorange.backend.model.*;
 import es.masorange.backend.repository.ChallengeRepository;
+import es.masorange.backend.repository.ChallengeSpecification;
 import es.masorange.backend.repository.DuelRepository;
 import es.masorange.backend.repository.UserSubmissionRepository;
 
@@ -113,16 +115,26 @@ public class ChallengeService {
         return allChallenges;
     }
 
-    public List<Challenge> getAllChallengesForUser(String keycloakId) {
-        log.info("Recuperando todos los challenges de la BBDD...");
-        List<Challenge> challenges = challengeRepository.findAll();
+    public Page<Challenge> getAllChallengesWithFilters(
+            String keycloakId, int page, int size,
+            String search, String dificultad, String etiqueta,
+            String tiempo, String estadoResuelto,
+            String testFiltro, String visibilidad, boolean isAdmin) {
 
-        List<Long> solvedIds = userSubmissionRepository.findSolvedChallengeIdsByKeycloakId(keycloakId);
-        log.info("Recuperando los challenges resueltos por el usuario: {}", keycloakId);
+        List<Long> solvedIds = new ArrayList<>();
+        if (keycloakId != null && !keycloakId.isEmpty()) {
+            solvedIds = userSubmissionRepository.findSolvedChallengeIdsByKeycloakId(keycloakId);
+        }
+        Specification<Challenge> spec = ChallengeSpecification.buildFilter(
+                search, dificultad, etiqueta, tiempo, estadoResuelto,
+                testFiltro, visibilidad, isAdmin, solvedIds);
 
-        challenges.forEach(c -> c.setSolved(solvedIds.contains(c.getId())));
+        Pageable pageable = PageRequest.of(page, size);
+        Page<Challenge> challengesPage = challengeRepository.findAll(spec, pageable);
+        List<Long> finalSolvedIds = solvedIds;
+        challengesPage.forEach(c -> c.setSolved(finalSolvedIds.contains(c.getId())));
 
-        return challenges;
+        return challengesPage;
     }
 
     public Optional<Challenge> getChallenge(Long id) {
