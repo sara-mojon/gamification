@@ -29,7 +29,9 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 
 import es.masorange.backend.model.Challenge;
+import es.masorange.backend.model.Duel;
 import es.masorange.backend.repository.ChallengeRepository;
+import es.masorange.backend.repository.DuelRepository;
 
 @Service
 public class SlackIntegrationService {
@@ -53,12 +55,14 @@ public class SlackIntegrationService {
     private final ChallengeRepository challengeRepository;
     private final UserClientService userClientService;
     private final OllamaTaskService ollamaTaskService;
+    private final DuelRepository duelRepository;
 
     public SlackIntegrationService(ChallengeRepository challengeRepository, UserClientService userClientService,
-            OllamaTaskService ollamaTaskService) {
+            OllamaTaskService ollamaTaskService, DuelRepository duelRepository) {
         this.challengeRepository = challengeRepository;
         this.userClientService = userClientService;
         this.ollamaTaskService = ollamaTaskService;
+        this.duelRepository = duelRepository;
     }
 
     // ==========================================
@@ -246,15 +250,16 @@ public class SlackIntegrationService {
             case "/info":
                 response.put("response_type", "ephemeral");
                 response.put("text", "📚 *Información de la plataforma* 📚\n\n" +
-                        "¡Bienvenido a nuestro sistema de gamificación para desarrolladores!\n\n" +
+                        "¡Bienvenido a nuestro sistema de gamificación para desarrolladores!\n" +
+                        "*Accede a la plataforma aquí:* https://app.saramg.org/\n\n" +
                         "*¿Qué es esto?*\n" +
                         "Es una plataforma que convierte el aprendizaje de programación en una experiencia divertida y competitiva.\n\n"
                         +
                         "*¿Cómo funciona?*\n" +
                         "1. Usa el comando `/challenge` para recibir un reto aleatorio.\n" +
-                        "2. Resuélvelo en la app y gana puntos.\n" +
+                        "2. Resuélvelo en la web y gana puntos.\n" +
                         "3. Consulta tu posición en el ranking con `/rank`.\n" +
-                        "4. Desafía a tus amigos con `/duel @usuario`.\n\n" +
+                        "4. Desafía a tus amigos con `/duel @usuario`.\n" +
                         "5. Pide pistas con `/hint` si te quedas atascado.\n\n" +
                         "💡 *Consejo:* Cuantos más retos resuelvas, más subirás en la clasificación.");
                 break;
@@ -529,6 +534,17 @@ public class SlackIntegrationService {
 
                     if (retoOpt.isPresent()) {
                         Challenge reto = retoOpt.get();
+
+                        Duel nuevoDuelo = new Duel();
+                        nuevoDuelo.setRetadorId(keycloakRetador);
+                        nuevoDuelo.setOponenteId(keycloakDesafiado);
+                        nuevoDuelo.setChallengeId(reto.getId());
+                        nuevoDuelo.setCanalSlackId(this.canalId);
+                        nuevoDuelo.setStatus("ACTIVE");
+                        duelRepository.save(nuevoDuelo);
+                        log.info("✅ Duelo guardado en BBDD. Retador: {}, Oponente: {}, Reto: {}",
+                                keycloakRetador, keycloakDesafiado, reto.getId());
+
                         String urlReto = frontendUrl + "/entrenar/" + reto.getId();
                         String descLimpia = limpiarDescripcionParaSlack(reto.getDescription());
 
@@ -559,7 +575,7 @@ public class SlackIntegrationService {
                     mensajeParaDesafiado = "🏃‍♂️ *Has rechazado el duelo.* Retirada...";
                 }
 
-                // MAGIA: Actualizamos el mensaje original (borra botones y pone el texto/reto)
+                // Actualizamos el mensaje original (borra botones y pone el texto/reto)
                 if (!mensajeParaDesafiado.isEmpty()) {
                     RestTemplate restTemplate = new RestTemplate();
                     Map<String, Object> updateBody = new HashMap<>();
@@ -572,6 +588,50 @@ public class SlackIntegrationService {
             }
         } catch (Exception e) {
             log.error("Error parseando el JSON de la interacción de Slack: {}", e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Anuncia públicamente al ganador de un duelo en el canal de Slack donde se
+     * originó.
+     */
+    public void anunciarGanadorDuelo(String canalSlackId, String ganadorId, String perdedorId) {
+        log.info("📢 Anunciando ganador del duelo en el canal: {}", canalSlackId);
+
+        // Si por algún motivo no tenemos el canal (por ejemplo, si fue por DM), usamos
+        // el canal general o abortamos
+        if (canalSlackId == null || canalSlackId.isEmpty()) {
+            log.warn("No hay canal de Slack asociado a este duelo para anunciar la victoria.");
+            return;
+        }
+
+        RestTemplate restTemplate = new RestTemplate();
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.setBearerAuth(slackBotToken);
+
+        // Construimos el mensaje de victoria
+        Map<String, Object> msgBody = new HashMap<>();
+        msgBody.put("channel", canalSlackId);
+        msgBody.put("text", "🎉 *¡TENEMOS UN GANADOR!* 🎉\n\n" +
+                "¡El duelo ha terminado! <@" + ganadorId + "> ha sido más rápido tecleando y ha aplastado a <@"
+                + perdedorId + ">.\n" +
+                "Reto superado con éxito! Los puntos ya están sumados en la clasificación global. 🏆");
+
+        try {
+            HttpEntity<Map<String, Object>> request = new HttpEntity<>(msgBody, headers);
+            ResponseEntity<String> response = restTemplate.postForEntity(
+                    "https://slack.com/api/chat.postMessage",
+                    request,
+                    String.class);
+
+            if (response.getStatusCode().is2xxSuccessful()) {
+                log.info("✅ Anuncio de victoria enviado correctamente a Slack.");
+            } else {
+                log.error("⚠️ Fallo al enviar anuncio a Slack. Código de respuesta: {}", response.getStatusCode());
+            }
+        } catch (Exception e) {
+            log.error("❌ Error conectando con la API de Slack para anunciar ganador: {}", e.getMessage(), e);
         }
     }
 

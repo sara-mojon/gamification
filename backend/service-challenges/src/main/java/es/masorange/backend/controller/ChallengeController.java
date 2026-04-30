@@ -134,13 +134,6 @@ public class ChallengeController {
         return challengeService.updateChallenge(id, dto);
     }
 
-    @GetMapping("/me/stats")
-    public ResponseEntity<Map<String, Long>> getMyStats(@RequestHeader("Authorization") String authHeader) {
-        String keycloakId = challengeService.extractKeycloakIdFromToken(authHeader);
-        long resueltos = challengeService.countSolvedChallenges(keycloakId);
-        return ResponseEntity.ok(Map.of("retosCompletados", resueltos));
-    }
-
     @GetMapping("/me/history")
     public ResponseEntity<List<ChallengeHistoryDTO>> getMyHistory(@RequestHeader("Authorization") String authHeader) {
         String keycloakId = challengeService.extractKeycloakIdFromToken(authHeader);

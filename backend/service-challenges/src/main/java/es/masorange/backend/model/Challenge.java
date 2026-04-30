@@ -58,21 +58,10 @@ public class Challenge {
     private boolean isSolved;
 
     @ElementCollection
-    @CollectionTable(name = "challenge_languages", joinColumns = @JoinColumn(name = "challenge_id"))
-    @Column(name = "language")
-    private Set<String> languages = new HashSet<>();
-
-    @ElementCollection
     @CollectionTable(name = "challenge_tests", joinColumns = @JoinColumn(name = "challenge_id"))
     @MapKeyColumn(name = "language")
     @Column(name = "test_script")
     private Map<String, String> tests = new HashMap<>();
-
-    @ElementCollection
-    @CollectionTable(name = "challenge_templates", joinColumns = @JoinColumn(name = "challenge_id"))
-    @MapKeyColumn(name = "language")
-    @Column(name = "template_code")
-    private Map<String, String> templates = new HashMap<>();
 
     @ElementCollection
     @CollectionTable(name = "challenge_solutions", joinColumns = @JoinColumn(name = "challenge_id"))

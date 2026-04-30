@@ -517,27 +517,24 @@ public class ChallengeService {
 
             log.info("✅ Puntos enviados y reto marcado como resuelto.");
 
-            /*
-             * log.info("🔍 Comprobando si el usuario {} estaba en un duelo activo...",
-             * keycloakId);
-             * 
-             * duelRepository.findActiveDuelForUserAndChallenge(keycloakId, challengeId)
-             * .ifPresent(duel -> {
-             * log.info("¡DUELO COMPLETADO! El usuario {} ha ganado el duelo {}.",
-             * keycloakId, duel.getId());
-             * 
-             * duel.setStatus("FINISHED");
-             * duel.setWinnerId(keycloakId);
-             * duelRepository.save(duel);
-             * 
-             * String perdedorId = duel.getRetadorId().equals(keycloakId) ?
-             * duel.getOponenteId()
-             * : duel.getRetadorId();
-             * 
-             * slackService.anunciarGanadorDuelo(duel.getCanalSlackId(), keycloakId,
-             * perdedorId);
-             * });
-             */
+            log.info("🔍 Comprobando si el usuario {} estaba en un duelo activo...",
+                    keycloakId);
+
+            duelRepository.findActiveDuelForUserAndChallenge(keycloakId, challengeId)
+                    .ifPresent(duel -> {
+                        log.info("¡DUELO COMPLETADO! El usuario {} ha ganado el duelo {}.",
+                                keycloakId, duel.getId());
+
+                        duel.setStatus("FINISHED");
+                        duel.setWinnerId(keycloakId);
+                        duelRepository.save(duel);
+
+                        String perdedorId = duel.getRetadorId().equals(keycloakId) ? duel.getOponenteId()
+                                : duel.getRetadorId();
+
+                        slackService.anunciarGanadorDuelo(duel.getCanalSlackId(), keycloakId,
+                                perdedorId);
+                    });
 
         } else {
             log.info("ℹ️ El usuario {} ya había resuelto este reto. No se otorgan puntos extra.", keycloakId);
