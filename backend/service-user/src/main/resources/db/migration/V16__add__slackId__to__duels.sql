@@ -1,0 +1,1 @@
+ALTER TABLE duels ADD COLUMN retador_slack_id VARCHAR(255), ADD COLUMN oponente_slack_id VARCHAR(255);

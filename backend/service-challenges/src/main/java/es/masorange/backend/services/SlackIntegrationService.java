@@ -538,6 +538,8 @@ public class SlackIntegrationService {
                         Duel nuevoDuelo = new Duel();
                         nuevoDuelo.setRetadorId(keycloakRetador);
                         nuevoDuelo.setOponenteId(keycloakDesafiado);
+                        nuevoDuelo.setRetadorSlackId(idRetador);
+                        nuevoDuelo.setOponenteSlackId(userIdClic);
                         nuevoDuelo.setChallengeId(reto.getId());
                         nuevoDuelo.setCanalSlackId(this.canalId);
                         nuevoDuelo.setStatus("ACTIVE");

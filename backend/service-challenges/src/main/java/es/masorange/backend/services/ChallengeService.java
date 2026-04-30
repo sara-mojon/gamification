@@ -529,11 +529,12 @@ public class ChallengeService {
                         duel.setWinnerId(keycloakId);
                         duelRepository.save(duel);
 
-                        String perdedorId = duel.getRetadorId().equals(keycloakId) ? duel.getOponenteId()
-                                : duel.getRetadorId();
+                        String ganadorSlackId = duel.getRetadorId().equals(keycloakId) ? duel.getRetadorSlackId()
+                                : duel.getOponenteSlackId();
+                        String perdedorSlackId = duel.getRetadorId().equals(keycloakId) ? duel.getOponenteSlackId()
+                                : duel.getRetadorSlackId();
 
-                        slackService.anunciarGanadorDuelo(duel.getCanalSlackId(), keycloakId,
-                                perdedorId);
+                        slackService.anunciarGanadorDuelo(duel.getCanalSlackId(), ganadorSlackId, perdedorSlackId);
                     });
 
         } else {

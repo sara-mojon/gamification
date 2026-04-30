@@ -23,6 +23,8 @@ public class Duel {
     private String oponenteId;
     private Long challengeId;
     private String canalSlackId;
+    private String retadorSlackId;
+    private String oponenteSlackId;
     private String status;
     private String winnerId;
 
