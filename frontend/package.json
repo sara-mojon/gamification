@@ -14,11 +14,13 @@
     "lucide-react": "^0.575.0",
     "oidc-client-ts": "^3.4.1",
     "react": "^19.2.0",
+    "react-confetti": "^6.4.0",
     "react-dom": "^19.2.0",
     "react-hot-toast": "^2.6.0",
     "react-markdown": "^10.1.0",
     "react-oidc-context": "^3.3.0",
-    "react-router-dom": "^7.13.1"
+    "react-router-dom": "^7.13.1",
+    "react-use": "^17.6.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
