@@ -142,16 +142,24 @@ tasks:
   # ================= #
 
   deploy:monitoring:
-    desc: "Despliega el stack LGTM (Loki, Grafana, Promtail) con Helm"
+    desc: "Despliega el stack LGTM en Home y Promtail en AI"
     silent: true
     cmds:
-      - "{{.LOG_INFO}} Deploying Monitoring Stack (LGTM)... {{.END_LOG}}"
+      - "{{.LOG_INFO}} Deploying Monitoring Stack (LGTM) on Home Server... {{.END_LOG}}"
       - cmd: |
           {{.SSH_HOME}} "echo '{{.HOME_LAB_SUDO_PASS}}' | sudo -S -p '' bash -c 'mkdir -p {{.TMP_DIR}} && chown {{.USER}}:{{.USER}} {{.TMP_DIR}}'"
       - scp -i {{.SSH_KEY}} k3s/home-server/lgtm.yaml {{.USER}}@{{.HOME_IP}}:{{.TMP_DIR}}/lgtm.yaml
       - cmd: |
           {{.SSH_HOME}} "echo '{{.HOME_LAB_SUDO_PASS}}' | sudo -S -p '' bash -c 'export KUBECONFIG=/etc/rancher/k3s/k3s.yaml && mv {{.TMP_DIR}}/lgtm.yaml {{.K3S_ROOT}}/lgtm.yaml && kubectl create namespace sara --dry-run=client -o yaml | kubectl apply -f - && helm repo add grafana https://grafana.github.io/helm-charts && helm repo update && helm upgrade --install lgtm-sara grafana/loki-stack --namespace sara --values {{.K3S_ROOT}}/lgtm.yaml'"
-      - "{{.LOG_SUCCESS}} Monitoring deployed via Helm. {{.END_LOG}}"
+
+      - "{{.LOG_INFO}} Deploying Promtail on AI Server... {{.END_LOG}}"
+      - cmd: |
+          {{.SSH_AI}} "echo '{{.HOME_LAB_SUDO_PASS}}' | sudo -S -p '' bash -c 'mkdir -p {{.TMP_DIR}} && chown {{.USER}}:{{.USER}} {{.TMP_DIR}}'"
+      - scp -i {{.SSH_KEY}} k3s/ai-server/promtail.yaml {{.USER}}@{{.AI_IP}}:{{.TMP_DIR}}/promtail.yaml
+      - cmd: |
+          {{.SSH_AI}} "echo '{{.HOME_LAB_SUDO_PASS}}' | sudo -S -p '' bash -c 'export KUBECONFIG=/etc/rancher/k3s/k3s.yaml && mv {{.TMP_DIR}}/promtail.yaml {{.K3S_ROOT}}/promtail.yaml && kubectl create namespace sara --dry-run=client -o yaml | kubectl apply -f - && helm repo add grafana https://grafana.github.io/helm-charts && helm repo update && helm upgrade --install promtail-ai grafana/loki-stack --namespace sara --values {{.K3S_ROOT}}/promtail.yaml'"
+
+      - "{{.LOG_SUCCESS}} Monitoring deployed on BOTH servers. {{.END_LOG}}"
 
   deploy:infra:
     silent: true

@@ -59,9 +59,11 @@ spec:
                   key: db-password
             - name: SPRING_JPA_HIBERNATE_DDL_AUTO
               value: "validate"
+            - name: SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE
+              value: "50"
             # SEGURIDAD KEYCLOAK
             - name: SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI
-              value: "https://auth.sara.local/realms/masorange-realm"
+              value: "https://auth.saramg.org/realms/masorange-realm"
             - name: SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI
               value: "http://keycloak:8080/realms/masorange-realm/protocol/openid-connect/certs"
           resources:

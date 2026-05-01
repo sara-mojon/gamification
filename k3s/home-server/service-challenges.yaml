@@ -1,32 +1,32 @@
-# k3s/home-server/service-gamification.yaml
+# k3s/home-server/service-challenges.yaml
 
 apiVersion: v1
 kind: Service
 metadata:
-  name: service-gamification
+  name: service-challenges
   namespace: sara
 spec:
   type: ClusterIP
   selector:
-    app: service-gamification
+    app: service-challenges
   ports:
-    - port: 8082
-      targetPort: 8082
+    - port: 8081
+      targetPort: 8081
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: service-gamification
+  name: service-challenges
   namespace: sara
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: service-gamification
+      app: service-challenges
   template:
     metadata:
       labels:
-        app: service-gamification
+        app: service-challenges
     spec:
       hostAliases:
         - ip: "100.114.58.117"
@@ -42,11 +42,11 @@ spec:
               'until nc -z -v -w30 postgres-infra 5432; do echo "Waiting for DB..."; sleep 2; done;',
             ]
       containers:
-        - name: service-gamification
-          image: saramojon/service-gamification:v1
+        - name: service-challenges
+          image: saramojon/service-challenges:v1
           imagePullPolicy: Always
           ports:
-            - containerPort: 8082
+            - containerPort: 8081
           env:
             - name: SPRING_DATASOURCE_URL
               value: "jdbc:postgresql://postgres-infra:5432/gamification_db"
@@ -61,13 +61,38 @@ spec:
               value: "validate"
             - name: SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE
               value: "50"
-            - name: OLLAMA_URL
-              value: "http://ai-server.taild995dd.ts.net"
+            # SEGURIDAD KEYCLOAK
             - name: SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI
               value: "https://auth.saramg.org/realms/masorange-realm"
             - name: SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI
               value: "http://keycloak:8080/realms/masorange-realm/protocol/openid-connect/certs"
-
+            # COMUNICACIÓN INTERNA
+            - name: SERVICE_GAMIFICATION_URL
+              value: "http://service-gamification:8082"
+            # SLACK
+            - name: SLACK_BOT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: app-secret
+                  key: slack-bot-token
+            - name: SLACK_SIGNING_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: app-secret
+                  key: slack-signing-secret
+            - name: SLACK_CHANNEL_TEST_ID
+              valueFrom:
+                secretKeyRef:
+                  name: app-secret
+                  key: slack-channel-test-id
+            # 2. INYECTAMOS LAS NUEVAS VARIABLES QUE CREAMOS EN JAVA
+            - name: OLLAMA_URL
+              # Apuntamos al Ingress del AI Server por el puerto 80
+              value: "http://ai-server.taild995dd.ts.net"
+            - name: JUDGE0_URL
+              value: "http://judge0-server:2358"
+            - name: FRONTEND_URL
+              value: "https://app.saramg.org"
           resources:
             requests:
               memory: "256Mi"
