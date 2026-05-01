@@ -274,49 +274,8 @@ public class SlackIntegrationService {
     }
 
     // ==========================================
-    // VALIDACIÓN Y CRON
+    // CRON
     // ==========================================
-    public boolean isValidSlackRequest(String slackSignature, String timestamp, String rawBody) {
-        if (slackSignature == null || timestamp == null) {
-            log.warn("Validación Slack fallida: Faltan las cabeceras de firma o timestamp");
-            return false;
-        }
-
-        long timeTime = Long.parseLong(timestamp);
-        long currentTime = System.currentTimeMillis() / 1000;
-        long diferenciaSegundos = Math.abs(currentTime - timeTime);
-
-        if (diferenciaSegundos > 300) {
-            log.warn("Validación Slack fallida: Posible ataque de repetición. Timestamp expirado hace {} segundos",
-                    diferenciaSegundos);
-            return false;
-        }
-
-        String sigBaseString = "v0:" + timestamp + ":" + rawBody;
-
-        try {
-            Mac mac = Mac.getInstance("HmacSHA256");
-            SecretKeySpec secretKeySpec = new SecretKeySpec(slackSigningSecret.getBytes(StandardCharsets.UTF_8),
-                    "HmacSHA256");
-            mac.init(secretKeySpec);
-
-            byte[] hash = mac.doFinal(sigBaseString.getBytes(StandardCharsets.UTF_8));
-            String mySignature = "v0=" + HexFormat.of().formatHex(hash);
-            boolean isValid = mySignature.equals(slackSignature);
-
-            if (!isValid) {
-                log.warn("Validación Slack fallida: Las firmas no coinciden.");
-            } else {
-                log.info("Firma de Slack validada correctamente");
-            }
-
-            return isValid;
-
-        } catch (Exception e) {
-            log.error("Error crítico al calcular la firma de Slack: {}", e.getMessage(), e);
-            return false;
-        }
-    }
 
     // @Scheduled(cron = "0 */5 * * * *")
     @Scheduled(cron = "0 30 8 * * MON-FRI")

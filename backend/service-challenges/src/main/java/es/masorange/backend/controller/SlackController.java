@@ -8,14 +8,12 @@ import org.springframework.util.MultiValueMap;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.core.type.TypeReference;
-
 import es.masorange.backend.services.SlackIntegrationService;
 
 @RestController
@@ -32,14 +30,7 @@ public class SlackController {
     // 1. EVENTOS DE SLACK - Para el challenge y archivos
     // ==========================================================
     @PostMapping(value = "/events", consumes = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<?> handleEvents(
-            @RequestHeader(value = "X-Slack-Signature", required = false) String signature,
-            @RequestHeader(value = "X-Slack-Request-Timestamp", required = false) String timestamp,
-            @RequestBody String rawPayload) {
-        if (!slackService.isValidSlackRequest(signature, timestamp, rawPayload)) {
-            System.err.println("⚠️ ATENCIÓN: Se ha bloqueado una petición falsa que fingía ser de Slack.");
-            return ResponseEntity.status(401).body("Firma inválida");
-        }
+    public ResponseEntity<?> handleEvents(@RequestBody String rawPayload) {
 
         try {
             ObjectMapper mapper = new ObjectMapper();
