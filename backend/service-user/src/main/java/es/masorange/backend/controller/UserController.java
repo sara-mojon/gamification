@@ -53,6 +53,10 @@ public class UserController {
         String keycloakId = jwt.getSubject();
 
         return userService.getUserByKeycloakId(keycloakId)
+                .map(user -> {
+                    userService.validateCurrentStreak(user);
+                    return user;
+                })
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
@@ -85,15 +89,13 @@ public class UserController {
     }
 
     @PostMapping("/link-slack")
-    public ResponseEntity<Void> linkSlackUser(@RequestBody java.util.Map<String, String> payload) {
-        String username = payload.get("username");
-        String slackId = payload.get("slackId");
-
-        if (username != null && slackId != null) {
-            userService.vincularSlackSiEsNecesario(username, slackId);
+    public ResponseEntity<?> linkSlackUser(@RequestParam String slackUserId, @RequestParam String slackUserName) {
+        User user = userService.vincularSlackSiEsNecesario(slackUserId, slackUserName);
+        if (user != null) {
+            return ResponseEntity.ok(user);
+        } else {
+            return ResponseEntity.notFound().build();
         }
-
-        return ResponseEntity.ok().build();
     }
 
     @GetMapping("/slack/{slackId}/keycloak")

@@ -53,10 +53,13 @@ public class KeycloakSyncService {
         try {
             UserResource userResource = keycloak.realm(realm).users().get(keycloakId);
 
-            RoleRepresentation newRole = keycloak.realm(realm).roles().get(newRoleName).toRepresentation();
+            String keycloakNewRole = "ROLE_" + newRoleName.toUpperCase();
+            String keycloakOldRole = "ROLE_" + oldRoleName.toUpperCase();
+
+            RoleRepresentation newRole = keycloak.realm(realm).roles().get(keycloakNewRole).toRepresentation();
             userResource.roles().realmLevel().add(Collections.singletonList(newRole));
 
-            RoleRepresentation oldRole = keycloak.realm(realm).roles().get(oldRoleName).toRepresentation();
+            RoleRepresentation oldRole = keycloak.realm(realm).roles().get(keycloakOldRole).toRepresentation();
             userResource.roles().realmLevel().remove(Collections.singletonList(oldRole));
 
             log.info("Roles actualizados en Keycloak para: {}", keycloakId);

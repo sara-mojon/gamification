@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
@@ -24,10 +25,13 @@ public class UserService {
 
     private final UserRepository userRepository;
     private final KeycloakSyncService keycloakSyncService;
+    private final SlackClientService slackClientService;
 
-    public UserService(UserRepository userRepository, KeycloakSyncService keycloakSyncService) {
+    public UserService(UserRepository userRepository, KeycloakSyncService keycloakSyncService,
+            SlackClientService slackClientService) {
         this.userRepository = userRepository;
         this.keycloakSyncService = keycloakSyncService;
+        this.slackClientService = slackClientService;
     }
 
     public User syncUserWithKeycloak(Jwt jwt) {
@@ -36,11 +40,36 @@ public class UserService {
         String email = jwt.getClaimAsString("email");
         String nombre = jwt.getClaimAsString("given_name");
 
+        // 1. Buscamos por Keycloak ID
         Optional<User> userOpt = userRepository.findByKeycloakId(keycloakId);
         if (userOpt.isPresent()) {
-            return userOpt.get();
+            User existingUser = userOpt.get();
+            boolean needsUpdate = false;
+
+            // Comprobamos si hay cambios en Keycloak que no tengamos en la BBDD
+            if (username != null && !username.equals(existingUser.getUsername())) {
+                existingUser.setUsername(username);
+                needsUpdate = true;
+            }
+            if (email != null && !email.equals(existingUser.getEmail())) {
+                existingUser.setEmail(email);
+                needsUpdate = true;
+            }
+            if (nombre != null && !nombre.equals(existingUser.getNombre())) {
+                existingUser.setNombre(nombre);
+                needsUpdate = true;
+            }
+
+            // Si detectó algún cambio, actualizamos la BBDD
+            if (needsUpdate) {
+                log.info("Actualizando datos en BBDD desde Keycloak para usuario: {}", username);
+                return userRepository.save(Objects.requireNonNull(existingUser));
+            }
+
+            return existingUser;
         }
 
+        // 2. Lógica para usuarios antiguos (Migración)
         Optional<User> oldUserOpt = userRepository.findByUsername(username);
         if (oldUserOpt.isPresent()) {
             User oldUser = oldUserOpt.get();
@@ -49,11 +78,21 @@ public class UserService {
             return userRepository.save(oldUser);
         }
 
+        // 3. Lógica para usuarios nuevos
         try {
             User newUser = new User();
             newUser.setKeycloakId(keycloakId);
             newUser.setUsername(username);
             newUser.setEmail(email);
+
+            if (email != null) {
+                String slackIdAutomatico = slackClientService.getSlackIdByEmail(email);
+                if (slackIdAutomatico != null) {
+                    newUser.setSlackId(slackIdAutomatico);
+                    log.info("🔗 Slack ID recuperado desde service-challenges para: {}", email);
+                }
+            }
+
             newUser.setNombre(nombre != null ? nombre : username);
             newUser.setRole("user");
             newUser.setScore(0);
@@ -69,45 +108,61 @@ public class UserService {
         }
     }
 
+    public void validateCurrentStreak(User user) {
+        if (user.getLastSolveDate() == null || user.getCurrentStreak() == 0) {
+            return;
+        }
+
+        LocalDate today = LocalDate.now();
+        long daysBetween = ChronoUnit.DAYS.between(user.getLastSolveDate(), today);
+        DayOfWeek dayOfWeek = today.getDayOfWeek();
+        boolean rachaPerdida = false;
+
+        if (dayOfWeek == DayOfWeek.MONDAY && daysBetween > 3) {
+            rachaPerdida = true;
+        } else if (dayOfWeek == DayOfWeek.SUNDAY && daysBetween > 2) {
+            rachaPerdida = true;
+        } else if (dayOfWeek == DayOfWeek.SATURDAY && daysBetween > 1) {
+            rachaPerdida = true;
+        } else if (dayOfWeek != DayOfWeek.SATURDAY && dayOfWeek != DayOfWeek.SUNDAY && dayOfWeek != DayOfWeek.MONDAY
+                && daysBetween > 1) {
+            rachaPerdida = true;
+        }
+
+        if (rachaPerdida) {
+            log.info("💔 Racha perdida por inactividad para {}. Pasa a 0.", user.getUsername());
+            user.setCurrentStreak(0);
+            userRepository.save(user);
+        }
+    }
+
     public void updateUserStreak(User user) {
         LocalDate today = LocalDate.now();
         DayOfWeek dayOfWeek = today.getDayOfWeek();
 
-        if (user.getLastSolveDate() == null) {
+        validateCurrentStreak(user);
+
+        if (user.getLastSolveDate() == null || user.getCurrentStreak() == 0) {
             user.setCurrentStreak(1);
             user.setLastSolveDate(today);
+            log.info("🌱 Nueva racha iniciada para {}: 1 día", user.getUsername());
         } else {
             long daysBetween = ChronoUnit.DAYS.between(user.getLastSolveDate(), today);
-            boolean esConsecutivo = false;
-            if (daysBetween == 1) {
-                // Caso normal: resolvió ayer
-                esConsecutivo = true;
-            } else if (dayOfWeek == DayOfWeek.MONDAY) {
-                // Si es lunes, aceptamos que el último fuera viernes (3 días), sábado (2) o
-                // domingo (1)
-                if (daysBetween <= 3)
-                    esConsecutivo = true;
-            }
 
-            if (esConsecutivo) {
-                user.setCurrentStreak(user.getCurrentStreak() + 1);
-                log.info("🔥 Racha aumentada para {}: {} días", user.getUsername(), user.getCurrentStreak());
-            } else if (daysBetween > 1) {
-                // Si es fin de semana (Sáb/Dom) y NO resuelve, no hacemos nada (la racha se
-                // congela)
-                if (dayOfWeek == DayOfWeek.SATURDAY || dayOfWeek == DayOfWeek.SUNDAY) {
-                    log.info("😴 Fin de semana para {}. Racha congelada.", user.getUsername());
-                    return;
-                }
-
-                log.info("Racha perdida para {}. Volviendo a 1.", user.getUsername());
-                user.setCurrentStreak(1);
-            } else {
-                log.info("{} ya ha resuelto hoy. Racha mantenida.", user.getUsername());
+            if (daysBetween == 0) {
+                log.info("✅ {} ya ha resuelto hoy. Racha mantenida.", user.getUsername());
                 return;
             }
+            if (dayOfWeek == DayOfWeek.SATURDAY || dayOfWeek == DayOfWeek.SUNDAY) {
+                log.info("😴 Fin de semana para {}. Racha congelada (no suma pero no se pierde).", user.getUsername());
+                user.setLastSolveDate(today);
+                userRepository.save(user);
+                return;
+            }
+            user.setCurrentStreak(user.getCurrentStreak() + 1);
+            user.setLastSolveDate(today);
+            log.info("🔥 Racha aumentada para {}: {} días", user.getUsername(), user.getCurrentStreak());
         }
-        user.setLastSolveDate(today);
         userRepository.save(user);
     }
 
@@ -220,14 +275,20 @@ public class UserService {
         return responseList;
     }
 
-    public void vincularSlackSiEsNecesario(String username, String slackId) {
-        userRepository.findByUsername(username).ifPresent(user -> {
-            if (user.getSlackId() == null || !user.getSlackId().equals(slackId)) {
+    public User vincularSlackSiEsNecesario(String slackId, String username) {
+        Optional<User> userPorId = userRepository.findBySlackId(slackId);
+        if (userPorId.isPresent()) {
+            return userPorId.get();
+        }
+
+        return userRepository.findByUsername(username).map(user -> {
+            if (user.getSlackId() == null) {
                 user.setSlackId(slackId);
-                userRepository.save(user);
-                log.info("Usuario {} vinculado con Slack ID: {}", username, slackId);
+                log.info("🔗 ¡Bingo! Usuario {} vinculado de forma transparente con Slack ID: {}", username, slackId);
+                return userRepository.save(user);
             }
-        });
+            return null;
+        }).orElse(null);
     }
 
     public void addPointsToUser(String keycloakId, int points) {

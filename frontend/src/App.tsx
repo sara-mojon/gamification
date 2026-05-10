@@ -40,7 +40,7 @@ function App() {
 
   return (
     <div style={{ height: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", backgroundColor: "#f5f5f5", fontFamily: "sans-serif" }}>
-      <h1 style={{ fontSize: "3rem", marginBottom: "10px", color: "#333" }}>Codewars Clone</h1>
+      <h1 style={{ fontSize: "3rem", marginBottom: "10px", color: "#333" }}>Ofelia Code</h1>
       <p style={{ marginBottom: "30px", color: "#666", fontSize: "1.2rem" }}>Demuestra tus habilidades de programación.</p>
       
       <button 

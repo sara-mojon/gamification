@@ -203,86 +203,81 @@ export default function Admin() {
 
       {/* Tabla de Usuarios */}
       <div style={{ backgroundColor: "white", borderRadius: "10px", boxShadow: "0 4px 6px rgba(0,0,0,0.05)", border: "1px solid #eaeaea", overflow: "hidden" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left" }}>
-          
-          <thead style={{ backgroundColor: "#f8f9fa", borderBottom: "2px solid #eee" }}>
-            <tr>
-              <th style={{ padding: "18px 20px", color: "#555", fontWeight: "bold" }}>Usuario</th>
-              <th style={{ padding: "18px 20px", color: "#555", fontWeight: "bold" }}>Email</th>
-              <th style={{ padding: "18px 20px", color: "#555", fontWeight: "bold" }}>Lenguaje preferido</th>
-              <th style={{ padding: "18px 20px", color: "#555", fontWeight: "bold" }}>Puntuación</th>
-              <th style={{ padding: "18px 20px", color: "#555", fontWeight: "bold" }}>Rol</th>
-              <th style={{ padding: "18px 20px", color: "#555", fontWeight: "bold", textAlign: "center" }}>Acciones</th>
-            </tr>
-          </thead>
-          
-          <tbody>
-            {usuariosFiltrados.length === 0 ? (
+        <div style={{ overflowX: "auto", width: "100%" }}>          
+          <table style={{ width: "100%", minWidth: "800px", borderCollapse: "collapse", textAlign: "left" }}>
+            
+            <thead style={{ backgroundColor: "#f8f9fa", borderBottom: "2px solid #eee" }}>
               <tr>
-                <td colSpan={6} style={{ textAlign: "center", padding: "40px", color: "#888" }}>
-                  <Users size={48} style={{ opacity: 0.5, marginBottom: "10px" }} />
-                  <br/>No se encontraron usuarios.
-                </td>
+                <th style={{ padding: "18px 20px", color: "#555", fontWeight: "bold" }}>Usuario</th>
+                <th style={{ padding: "18px 20px", color: "#555", fontWeight: "bold" }}>Email</th>
+                <th style={{ padding: "18px 20px", color: "#555", fontWeight: "bold" }}>Lenguaje preferido</th>
+                <th style={{ padding: "18px 20px", color: "#555", fontWeight: "bold" }}>Puntuación</th>
+                <th style={{ padding: "18px 20px", color: "#555", fontWeight: "bold" }}>Rol</th>
+                <th style={{ padding: "18px 20px", color: "#555", fontWeight: "bold", textAlign: "center" }}>Acciones</th>
               </tr>
-            ) : (
-              usuariosFiltrados.map((user) => (
-                <tr key={user.id} style={{ borderBottom: "1px solid #eee", transition: "background-color 0.2s" }} onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#fafafa"} onMouseOut={(e) => e.currentTarget.style.backgroundColor = "transparent"}>
-                  
-                  <td style={{ padding: "15px 20px" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                      <div style={{ backgroundColor: user.role === 'admin' ? '#fff3e0' : '#f0f0f0', padding: "10px", borderRadius: "50%", color: user.role === 'admin' ? '#ff9800' : '#888' }}>
-                        {user.role === 'admin' ? <Shield size={20}/> : <UserIcon size={20}/>}
-                      </div>
-                      <span style={{ fontWeight: "bold", color: "#333", fontSize: "1.05rem" }}>{user.username}</span>
-                    </div>
+            </thead>
+            
+            <tbody>
+              {usuariosFiltrados.length === 0 ? (
+                <tr>
+                  <td colSpan={6} style={{ textAlign: "center", padding: "40px", color: "#888" }}>
+                    <Users size={48} style={{ opacity: 0.5, marginBottom: "10px" }} />
+                    <br/>No se encontraron usuarios.
                   </td>
-                  
-                  <td style={{ padding: "15px 20px", color: "#666" }}>
-                    {user.email ? (
-                      <span style={{ display: "flex", alignItems: "center", gap: "6px" }}><Mail size={16} /> {user.email}</span>
-                    ) : (
-                      <span style={{ color: "#aaa", fontStyle: "italic" }}>Sin email</span>
-                    )}
-                  </td>
-                  
-                  <td style={{ padding: "15px 20px" }}>
-                    <span style={{ backgroundColor: "#e3f2fd", color: "#1976d2", padding: "4px 10px", borderRadius: "20px", fontSize: "0.85rem", fontWeight: "bold", textTransform: "capitalize" }}>
-                      {user.preferredLanguage || "Ninguno"}
-                    </span>
-                  </td>
-                  
-                  <td style={{ padding: "15px 20px", fontWeight: "bold", color: "#1e1e1e" }}>
-                    {user.score} pts
-                  </td>
-                  
-                  <td style={{ padding: "15px 20px" }}>
-                    <select 
-                      value={user.role} 
-                      onChange={(e) => cambiarRol(user.id, e.target.value, user.username)}
-                      className={user.role === 'admin' ? 'select-rol-admin' : 'select-rol-user'}
-                    >
-                      <option value="user">Usuario normal</option>
-                      <option value="admin">Administrador</option>
-                    </select>
-                  </td>
-                  
-                  <td style={{ padding: "15px 20px", textAlign: "center" }}>
-                    <button 
-                      title="Eliminar usuario" 
-                      onClick={() => setModalEliminar({ abierto: true, id: user.id, nombre: user.username })}
-                      style={{ background: "white", border: "1px solid #ffcdd2", borderRadius: "6px", padding: "8px", cursor: "pointer", color: "#d32f2f", transition: "0.2s" }} 
-                      onMouseOver={(e) => {e.currentTarget.style.backgroundColor = "#ffebee"; e.currentTarget.style.borderColor = "#d32f2f"}} 
-                      onMouseOut={(e) => {e.currentTarget.style.backgroundColor = "white"; e.currentTarget.style.borderColor = "#ffcdd2"}}
-                    >
-                      <Trash2 size={18} />
-                    </button>
-                  </td>
-                  
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              ) : (
+                usuariosFiltrados.map((user) => (
+                  <tr key={user.id} style={{ borderBottom: "1px solid #eee", transition: "background-color 0.2s" }} onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#fafafa"} onMouseOut={(e) => e.currentTarget.style.backgroundColor = "transparent"}>  
+                    <td style={{ padding: "15px 20px" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                        <div style={{ backgroundColor: user.role === 'admin' ? '#fff3e0' : '#f0f0f0', padding: "10px", borderRadius: "50%", color: user.role === 'admin' ? '#ff9800' : '#888' }}>
+                          {user.role === 'admin' ? <Shield size={20}/> : <UserIcon size={20}/>}
+                        </div>
+                        <span style={{ fontWeight: "bold", color: "#333", fontSize: "1.05rem" }}>{user.username}</span>
+                      </div>
+                    </td>
+                    <td style={{ padding: "15px 20px", color: "#666" }}>
+                      {user.email ? (
+                        <span style={{ display: "flex", alignItems: "center", gap: "6px" }}><Mail size={16} /> {user.email}</span>
+                      ) : (
+                        <span style={{ color: "#aaa", fontStyle: "italic" }}>Sin email</span>
+                      )}
+                    </td>
+                    <td style={{ padding: "15px 20px" }}>
+                      <span style={{ backgroundColor: "#e3f2fd", color: "#1976d2", padding: "4px 10px", borderRadius: "20px", fontSize: "0.85rem", fontWeight: "bold", textTransform: "capitalize" }}>
+                        {user.preferredLanguage || "Ninguno"}
+                      </span>
+                    </td>
+                    <td style={{ padding: "15px 20px", fontWeight: "bold", color: "#1e1e1e" }}>
+                      {user.score} pts
+                    </td>
+                    <td style={{ padding: "15px 20px" }}>
+                      <select 
+                        value={user.role} 
+                        onChange={(e) => cambiarRol(user.id, e.target.value, user.username)}
+                        className={user.role === 'admin' ? 'select-rol-admin' : 'select-rol-user'}
+                      >
+                        <option value="user">Usuario normal</option>
+                        <option value="admin">Administrador</option>
+                      </select>
+                    </td>
+                    <td style={{ padding: "15px 20px", textAlign: "center" }}>
+                      <button 
+                        title="Eliminar usuario" 
+                        onClick={() => setModalEliminar({ abierto: true, id: user.id, nombre: user.username })}
+                        style={{ background: "white", border: "1px solid #ffcdd2", borderRadius: "6px", padding: "8px", cursor: "pointer", color: "#d32f2f", transition: "0.2s" }} 
+                        onMouseOver={(e) => {e.currentTarget.style.backgroundColor = "#ffebee"; e.currentTarget.style.borderColor = "#d32f2f"}} 
+                        onMouseOut={(e) => {e.currentTarget.style.backgroundColor = "white"; e.currentTarget.style.borderColor = "#ffcdd2"}}
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* MODAL DE CONFIRMACIÓN DE ELIMINACIÓN */}

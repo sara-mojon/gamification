@@ -542,6 +542,7 @@ public class ChallengeService {
 
                         duel.setStatus("FINISHED");
                         duel.setWinnerId(keycloakId);
+                        duel.setFinishedAt(java.time.LocalDateTime.now());
                         duelRepository.save(duel);
 
                         String ganadorSlackId = duel.getRetadorId().equals(keycloakId) ? duel.getRetadorSlackId()

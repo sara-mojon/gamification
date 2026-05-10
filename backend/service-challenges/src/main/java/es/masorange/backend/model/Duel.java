@@ -32,4 +32,6 @@ public class Duel {
     @Column(updatable = false)
     private LocalDateTime createdAt;
 
+    private LocalDateTime finishedAt;
+
 }

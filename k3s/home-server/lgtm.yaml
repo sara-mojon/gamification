@@ -8,8 +8,12 @@ loki:
     replication_factor: 1
   persistence:
     enabled: true
-    size: 10Gi
+    size: 32Gi
     storageClassName: "local-path" # K3s default storage
+  compactor:
+    retention_enabled: true
+  limits_config:
+    retention_period: 744h # 744 horas = 31 días
 
 # 2. Configuración de PROMTAIL (El recolector)
 promtail:

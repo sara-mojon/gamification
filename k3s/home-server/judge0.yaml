@@ -36,7 +36,7 @@ metadata:
   name: judge0-server
   namespace: sara
 spec:
-  replicas: 1
+  replicas: 3
   selector:
     matchLabels:
       app: judge0-server
@@ -87,6 +87,8 @@ spec:
             - configMapRef:
                 name: judge0-env
           env:
+            - name: RAILS_MAX_THREADS
+              value: "8"
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
@@ -109,95 +111,8 @@ spec:
               memory: "256Mi"
               cpu: "50m"
             limits:
-              memory: "1Gi"
-              cpu: "1000m"
-      volumes:
-        - name: wrapper-bin
-          emptyDir: {}
-        - name: isolate-data
-          hostPath:
-            path: /k3s/judge0-data
-            type: DirectoryOrCreate
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: judge0-worker
-  namespace: sara
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: judge0-worker
-  template:
-    metadata:
-      labels:
-        app: judge0-worker
-    spec:
-      hostPID: true
-      initContainers:
-        - name: wait-for-db
-          image: busybox
-          command:
-            [
-              "sh",
-              "-c",
-              "until nc -z postgres-infra 5432; do echo waiting for db; sleep 2; done;",
-            ]
-        - name: create-interceptor
-          image: judge0/judge0:1.13.1
-          command: ["/bin/sh", "-c"]
-          args:
-            - |
-              cat << 'EOF' > /wrapper/isolate
-              #!/bin/bash
-              clean_args=()
-              for arg in "$@"; do
-                case $arg in
-                  --cg) ;;
-                  --cg-*) ;;
-                  *) clean_args+=("$arg") ;;
-                esac
-              done
-              exec /usr/local/bin/isolate "${clean_args[@]}"
-              EOF
-              chmod +x /wrapper/isolate
-          volumeMounts:
-            - name: wrapper-bin
-              mountPath: /wrapper
-      containers:
-        - name: judge0-worker
-          image: judge0/judge0:1.13.1
-          command: ["/bin/sh", "-c"]
-          args: ["export PATH=/wrapper:$PATH && ./scripts/workers"]
-          envFrom:
-            - configMapRef:
-                name: judge0-env
-          env:
-            - name: POSTGRES_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: app-secret
-                  key: db-password
-            - name: REDIS_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: app-secret
-                  key: redis-password
-          securityContext:
-            privileged: true
-          volumeMounts:
-            - name: wrapper-bin
-              mountPath: /wrapper
-            - name: isolate-data
-              mountPath: /var/local/lib/isolate
-          resources:
-            requests:
-              memory: "256Mi"
-              cpu: "100m"
-            limits:
-              memory: "1Gi"
-              cpu: "1000m"
+              memory: "1.5Gi"
+              cpu: "2000m"
       volumes:
         - name: wrapper-bin
           emptyDir: {}

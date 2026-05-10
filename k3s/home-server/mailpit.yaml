@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mailpit
+  namespace: sara
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mailpit
+  template:
+    metadata:
+      labels:
+        app: mailpit
+    spec:
+      containers:
+        - name: mailpit
+          image: axllent/mailpit:latest
+          ports:
+            - containerPort: 8025 # Interfaz Web
+            - containerPort: 1025 # Puerto SMTP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mailpit-service
+  namespace: sara
+spec:
+  selector:
+    app: mailpit
+  ports:
+    - name: web
+      port: 8025
+      targetPort: 8025
+    - name: smtp
+      port: 1025
+      targetPort: 1025

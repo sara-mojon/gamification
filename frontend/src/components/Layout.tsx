@@ -56,7 +56,7 @@ export default function Layout() {
       
       <div style={{ width: isOpen ? "250px" : "70px", backgroundColor: "#1e1e1e", color: "white", transition: "width 0.3s", display: "flex", flexDirection: "column" }}>
         <div style={{ padding: "20px", display: "flex", alignItems: "center", justifyContent: isOpen ? "space-between" : "center" }}>
-          {isOpen && <h2 style={{ margin: 0, fontSize: "1.2rem", color: "#ff4b4b", fontFamily: "monospace" }}>CODEWARS</h2>}
+          {isOpen && <h2 style={{ margin: 0, fontSize: "1.2rem", color: "#ff4b4b", fontFamily: "monospace" }}>OFELIA CODE</h2>}
           <button onClick={() => setIsOpen(!isOpen)} style={{ background: "none", border: "none", color: "white", cursor: "pointer", padding: "5px" }}>
             <Menu size={24} />
           </button>

@@ -1,0 +1,79 @@
+# k3s/ai-server/telegraf-ai.yaml
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: telegraf-config-ai
+  namespace: sara
+data:
+  telegraf.conf: |
+    [agent]
+      interval = "10s"
+      round_interval = true
+      hostname = "ai-server"
+      omit_hostname = false
+
+    [[outputs.influxdb]]
+      urls = ["http://100.103.55.77:8086"]
+      database = "telegraf"
+
+    # -- LO QUE QUEREMOS MEDIR (Hardware del AI Server) --
+    [[inputs.cpu]]
+      percpu = true
+      totalcpu = true
+    [[inputs.mem]]
+    [[inputs.system]]
+    [[inputs.disk]]
+      mount_points = ["/"]
+      ignore_fs = ["tmpfs", "devtmpfs", "devfs", "iso9660", "overlay", "aufs", "squashfs", "efivarfs", "nsfs"]
+    [[inputs.diskio]]
+    [[inputs.net]]
+      interfaces = ["enp1s0", "tailscale0"] # Si en el AI server la interfaz se llama distinto a enp1s0, cámbialo.
+
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: telegraf-ai
+  namespace: sara
+spec:
+  selector:
+    matchLabels:
+      app: telegraf-ai
+  template:
+    metadata:
+      labels:
+        app: telegraf-ai
+    spec:
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      containers:
+        - name: telegraf
+          image: telegraf:1.38-alpine
+          securityContext:
+            runAsUser: 0
+          env:
+            - name: HOST_ETC
+              value: /hostfs/etc
+            - name: HOST_PROC
+              value: /hostfs/proc
+            - name: HOST_SYS
+              value: /hostfs/sys
+            - name: HOST_VAR
+              value: /hostfs/var/run
+            - name: HOST_MOUNT_PREFIX
+              value: /hostfs
+          volumeMounts:
+            - name: config
+              mountPath: /etc/telegraf/telegraf.conf
+              subPath: telegraf.conf
+            - name: hostfs
+              mountPath: /hostfs
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: telegraf-config-ai
+        - name: hostfs
+          hostPath:
+            path: /

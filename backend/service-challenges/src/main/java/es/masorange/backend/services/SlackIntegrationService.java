@@ -1,16 +1,11 @@
 package es.masorange.backend.services;
 
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
-
-import javax.crypto.Mac;
-import javax.crypto.spec.SecretKeySpec;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -70,10 +65,18 @@ public class SlackIntegrationService {
     // ==========================================
     public Map<String, Object> processCommand(String command, String userName, String userId, String text,
             String responseUrl) {
-        notificarVinculacionAServiceUser(userName, userId);
+
+        Map<String, Object> response = new HashMap<>();
+        boolean vinculadoOExiste = notificarVinculacionAServiceUser(userName, userId);
+
+        if (!vinculadoOExiste) {
+            response.put("response_type", "ephemeral");
+            response.put("text", "⚠️ *¡Alto ahí, <@" + userId + ">!*\n" +
+                    "No he podido encontrar tu cuenta en la plataforma. Asegúrate de haber iniciado sesión en la web.");
+            return response;
+        }
 
         log.info("Comando recibido: {} ejecutado por @{}", command, userName);
-        Map<String, Object> response = new HashMap<>();
 
         switch (command) {
             case "/challenge":
@@ -469,7 +472,28 @@ public class SlackIntegrationService {
                 JsonNode action = payload.get("actions").get(0);
                 String actionValue = action.get("value").asText();
                 String userIdClic = payload.get("user").get("id").asText();
+
+                String userNameClic = payload.path("user").has("username")
+                        ? payload.path("user").path("username").asText()
+                        : payload.path("user").path("name").asText();
+
                 String responseUrl = payload.get("response_url").asText();
+
+                boolean vinculadoOExiste = notificarVinculacionAServiceUser(userNameClic, userIdClic);
+                if (!vinculadoOExiste) {
+                    log.warn("Usuario fantasma intentó pulsar un botón: {}", userNameClic);
+
+                    RestTemplate restTemplate = new RestTemplate();
+                    Map<String, Object> errorBody = new HashMap<>();
+                    errorBody.put("replace_original", false);
+                    errorBody.put("response_type", "ephemeral");
+                    errorBody.put("text",
+                            "⚠️ *¡Alto ahí!* No puedes interactuar con los duelos hasta que no encuentre tu cuenta. Por favor, asegúrate de haber entrado a la plataforma web.");
+
+                    restTemplate.postForEntity(responseUrl, errorBody, String.class);
+
+                    return;
+                }
 
                 String mensajeParaDesafiado = "";
 
@@ -603,7 +627,8 @@ public class SlackIntegrationService {
     public void comprobarSorpassoPodio() {
         String USER_SERVICE_URL = "http://service-user:8080/api/users/ranking/top3";
         RestTemplate restTemplate = new RestTemplate();
-
+        log.info(
+                "Ejecutando tarea programada CRON: comprobarSorpassoPodio para detectar cambios en el Top 3 del ranking");
         try {
             ResponseEntity<List<Map<String, Object>>> response = restTemplate.exchange(
                     USER_SERVICE_URL,
@@ -690,24 +715,50 @@ public class SlackIntegrationService {
     // ==========================================
     // COMUNICACIÓN ENTRE MICROSERVICIOS
     // ==========================================
-    private void notificarVinculacionAServiceUser(String userName, String slackId) {
-        String USER_SERVICE_URL = "http://service-user:8080/api/users/link-slack";
+    private boolean notificarVinculacionAServiceUser(String userName, String slackId) {
+        String USER_SERVICE_URL = "http://service-user:8080/api/users/link-slack?slackUserId=" + slackId
+                + "&slackUserName=" + userName;
         RestTemplate restTemplate = new RestTemplate();
 
         try {
+            ResponseEntity<String> response = restTemplate.postForEntity(USER_SERVICE_URL, null, String.class);
+            return response.getStatusCode().is2xxSuccessful();
+        } catch (Exception e) {
+            log.warn("El usuario {} no existe o no se pudo vincular automáticamente: {}", userName, e.getMessage());
+            return false;
+        }
+    }
+
+    public String getSlackIdByEmail(String email) {
+        try {
+            String url = "https://slack.com/api/users.lookupByEmail?email=" + email;
+
             HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(org.springframework.http.MediaType.APPLICATION_JSON);
+            headers.set("Authorization", "Bearer " + slackBotToken);
+            HttpEntity<String> entity = new HttpEntity<>(headers);
+            RestTemplate restTemplate = new RestTemplate();
 
-            java.util.Map<String, String> body = new java.util.HashMap<>();
-            body.put("username", userName);
-            body.put("slackId", slackId);
+            ResponseEntity<Map<String, Object>> response = restTemplate.exchange(
+                    url,
+                    HttpMethod.GET,
+                    entity,
+                    new ParameterizedTypeReference<Map<String, Object>>() {
+                    });
 
-            HttpEntity<java.util.Map<String, String>> request = new HttpEntity<>(body, headers);
+            Map<String, Object> body = response.getBody();
 
-            restTemplate.postForEntity(USER_SERVICE_URL, request, Void.class);
+            if (body != null && Boolean.TRUE.equals(body.get("ok"))) {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> userObj = (Map<String, Object>) body.get("user");
+                return (String) userObj.get("id");
+            } else {
+                log.warn("Slack no encontró a nadie con el correo: {}", email);
+                return null;
+            }
 
         } catch (Exception e) {
-            log.warn("No se pudo notificar la vinculación de Slack para {}: {}", userName, e.getMessage());
+            log.error("Error al consultar el email en Slack: {}", e.getMessage());
+            return null;
         }
     }
 

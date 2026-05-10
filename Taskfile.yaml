@@ -38,11 +38,11 @@ tasks:
     cmds:
       - "{{.LOG_INFO}} --- HOME SERVER (Apps & Monitoring) --- {{.END_LOG}}"
       - cmd: |
-          {{.SSH_HOME}} "echo '{{.HOME_LAB_SUDO_PASS}}' | sudo -S -p '' kubectl get pod,svc,ingress -n sara"
+          {{.SSH_HOME}} "echo '{{.HOME_LAB_SUDO_PASS}}' | sudo -S -p '' kubectl get pod,svc,ingress,daemonset -n sara"
 
-      - "{{.LOG_INFO}} --- AI SERVER (Ollama) --- {{.END_LOG}}"
+      - "{{.LOG_INFO}} --- AI SERVER (Ollama & Monitoring) --- {{.END_LOG}}"
       - cmd: |
-          {{.SSH_AI}} "echo '{{.HOME_LAB_SUDO_PASS}}' | sudo -S -p '' kubectl get pod,svc,ingress -n sara"
+          {{.SSH_AI}} "echo '{{.HOME_LAB_SUDO_PASS}}' | sudo -S -p '' kubectl get pod,svc,ingress,daemonset -n sara"
 
   stop:
     desc: "Pausa todos los servicios (Apps, AI y Monitoring)"
@@ -51,10 +51,10 @@ tasks:
       - "{{.LOG_WARN}} Pausing services... {{.END_LOG}}"
       # 1. Home Apps
       - cmd: |
-          {{.SSH_HOME}} "echo '{{.HOME_LAB_SUDO_PASS}}' | sudo -S -p '' kubectl scale deployment service-user service-challenges service-gamification frontend postgres-infra redis judge0-server judge0-worker keycloak --replicas=0 -n sara"
+          {{.SSH_HOME}} "echo '{{.HOME_LAB_SUDO_PASS}}' | sudo -S -p '' kubectl scale deployment service-user service-challenges service-gamification frontend postgres-infra redis judge0-server keycloak --replicas=0 -n sara"
       # 2. Monitoring Stack
       - cmd: |
-          {{.SSH_HOME}} "echo '{{.HOME_LAB_SUDO_PASS}}' | sudo -S -p '' kubectl scale deployment/lgtm-sara-grafana statefulset/lgtm-sara-loki --replicas=0 -n sara"
+          {{.SSH_HOME}} "echo '{{.HOME_LAB_SUDO_PASS}}' | sudo -S -p '' kubectl scale deployment/lgtm-sara-grafana statefulset/lgtm-sara-loki deployment/influxdb --replicas=0 -n sara"
       # 3. AI Server
       - cmd: |
           {{.SSH_AI}} "echo '{{.HOME_LAB_SUDO_PASS}}' | sudo -S -p '' kubectl scale deployment ollama-service --replicas=0 -n sara"
@@ -67,7 +67,7 @@ tasks:
       - "{{.LOG_INFO}} Waking up services... {{.END_LOG}}"
       # 1. Bases de Datos y Logs
       - cmd: |
-          {{.SSH_HOME}} "echo '{{.HOME_LAB_SUDO_PASS}}' | sudo -S -p '' kubectl scale deployment postgres-infra redis --replicas=1 -n sara"
+          {{.SSH_HOME}} "echo '{{.HOME_LAB_SUDO_PASS}}' | sudo -S -p '' kubectl scale deployment postgres-infra redis deployment/influxdb --replicas=1 -n sara"
       - cmd: |
           {{.SSH_HOME}} "echo '{{.HOME_LAB_SUDO_PASS}}' | sudo -S -p '' kubectl scale deployment/lgtm-sara-grafana statefulset/lgtm-sara-loki --replicas=1 -n sara"
 
@@ -76,7 +76,7 @@ tasks:
 
       # 2. Apps de Negocio
       - cmd: |
-          {{.SSH_HOME}} "echo '{{.HOME_LAB_SUDO_PASS}}' | sudo -S -p '' kubectl scale deployment service-user service-challenges service-gamification frontend judge0-server judge0-worker keycloak --replicas=1 -n sara"
+          {{.SSH_HOME}} "echo '{{.HOME_LAB_SUDO_PASS}}' | sudo -S -p '' kubectl scale deployment service-user service-challenges service-gamification frontend judge0-server keycloak --replicas=1 -n sara"
 
       # 3. AI Server
       - cmd: |
@@ -167,7 +167,7 @@ tasks:
       - task: sync:home
       - "{{.LOG_INFO}} Deploying Infrastructure... {{.END_LOG}}"
       - cmd: |
-          {{.SSH_HOME}} "echo '{{.HOME_LAB_SUDO_PASS}}' | sudo -S -p '' bash -c 'mkdir -p {{.K3S_ROOT}}/redis-data {{.K3S_ROOT}}/judge0-data && if [ ! -d {{.K3S_ROOT}}/postgres-data ]; then mkdir -p {{.K3S_ROOT}}/postgres-data && chmod 777 {{.K3S_ROOT}}/postgres-data; fi && kubectl create namespace sara --dry-run=client -o yaml | kubectl apply -f - && kubectl apply -f {{.K3S_ROOT}}/k3s-secrets.yaml -f {{.K3S_ROOT}}/postgres.yaml -f {{.K3S_ROOT}}/redis.yaml -f {{.K3S_ROOT}}/judge0.yaml -f {{.K3S_ROOT}}/keycloak.yaml -f {{.K3S_ROOT}}/ingress-hs.yaml'"
+          {{.SSH_HOME}} "echo '{{.HOME_LAB_SUDO_PASS}}' | sudo -S -p '' bash -c 'mkdir -p {{.K3S_ROOT}}/redis-data {{.K3S_ROOT}}/judge0-data {{.K3S_ROOT}}/influxdb-data && chmod 777 {{.K3S_ROOT}}/influxdb-data && if [ ! -d {{.K3S_ROOT}}/postgres-data ]; then mkdir -p {{.K3S_ROOT}}/postgres-data && chmod 777 {{.K3S_ROOT}}/postgres-data; fi && kubectl create namespace sara --dry-run=client -o yaml | kubectl apply -f - && kubectl apply -f {{.K3S_ROOT}}/k3s-secrets.yaml -f {{.K3S_ROOT}}/postgres.yaml -f {{.K3S_ROOT}}/redis.yaml -f {{.K3S_ROOT}}/judge0.yaml -f {{.K3S_ROOT}}/keycloak.yaml -f {{.K3S_ROOT}}/ingress-hs.yaml -f {{.K3S_ROOT}}/telegraf-influx-hs.yaml -f {{.K3S_ROOT}}/mailpit.yaml'"
       - "{{.LOG_INFO}} Waiting for Postgres... {{.END_LOG}}"
       - cmd: |
           {{.SSH_HOME}} "echo '{{.HOME_LAB_SUDO_PASS}}' | sudo -S -p '' kubectl wait --for=condition=ready pod -l app=postgres-infra -n sara --timeout=60s"
@@ -209,9 +209,9 @@ tasks:
     silent: true
     cmds:
       - task: sync:ai
-      - "{{.LOG_INFO}} Deploying Ollama... {{.END_LOG}}"
+      - "{{.LOG_INFO}} Deploying Ollama & AI Monitoring... {{.END_LOG}}"
       - cmd: |
-          {{.SSH_AI}} "echo '{{.HOME_LAB_SUDO_PASS}}' | sudo -S -p '' bash -c 'mkdir -p {{.K3S_ROOT}}/ollama-data && chmod 777 {{.K3S_ROOT}}/ollama-data && kubectl create namespace sara --dry-run=client -o yaml | kubectl apply -f - && kubectl apply -f {{.K3S_ROOT}}/ollama.yaml && kubectl apply -f {{.K3S_ROOT}}/ingress-ai.yaml && kubectl rollout restart deployment ollama-service -n sara'"
+          {{.SSH_AI}} "echo '{{.HOME_LAB_SUDO_PASS}}' | sudo -S -p '' bash -c 'mkdir -p {{.K3S_ROOT}}/ollama-data && chmod 777 {{.K3S_ROOT}}/ollama-data && kubectl create namespace sara --dry-run=client -o yaml | kubectl apply -f - && kubectl apply -f {{.K3S_ROOT}}/k3s-secrets-ai.yaml -f {{.K3S_ROOT}}/ollama.yaml -f {{.K3S_ROOT}}/ingress-ai.yaml -f {{.K3S_ROOT}}/telegraf-ai.yaml && kubectl rollout restart deployment ollama-service -n sara'"
 
   deploy:all:
     desc: "Despliegue (Infra + Monitoring + Apps + AI)"
@@ -271,6 +271,13 @@ tasks:
           {{.SSH_HOME}} "echo '{{.HOME_LAB_SUDO_PASS}}' | sudo -S -p '' rm -rf {{.K3S_ROOT}}/judge0-data"
       - "{{.LOG_SUCCESS}} Judge0 data deleted. {{.END_LOG}}"
 
+  _clean:influxdb:
+    silent: true
+    cmds:
+      - cmd: |
+          {{.SSH_HOME}} "echo '{{.HOME_LAB_SUDO_PASS}}' | sudo -S -p '' rm -rf {{.K3S_ROOT}}/influxdb-data"
+      - "{{.LOG_SUCCESS}} InfluxDB data deleted. {{.END_LOG}}"
+
   _clean:ollama:
     silent: true
     cmds:
@@ -291,10 +298,11 @@ tasks:
         if ((Read-Host '[OPCIONAL] Delete GRAFANA/LOKI? (y/n)') -eq 'y') { task _clean:monitoring }
 
         Write-Host '--- DATA DELETION ---' -ForegroundColor Yellow
-        if ((Read-Host '[1/4] Delete POSTGRES DB? (y/n)') -eq 'y') { task _clean:postgres }
-        if ((Read-Host '[2/4] Delete REDIS? (y/n)') -eq 'y') { task _clean:redis }
-        if ((Read-Host '[3/4] Delete JUDGE0? (y/n)') -eq 'y') { task _clean:judge0 }
-        if ((Read-Host '[4/4] Delete OLLAMA? (y/n)') -eq 'y') { task _clean:ollama }
+        if ((Read-Host '[1/5] Delete POSTGRES DB? (y/n)') -eq 'y') { task _clean:postgres }
+        if ((Read-Host '[2/5] Delete REDIS? (y/n)') -eq 'y') { task _clean:redis }
+        if ((Read-Host '[3/5] Delete JUDGE0? (y/n)') -eq 'y') { task _clean:judge0 }
+        if ((Read-Host '[4/5] Delete INFLUXDB? (y/n)') -eq 'y') { task _clean:influxdb }
+        if ((Read-Host '[5/5] Delete OLLAMA? (y/n)') -eq 'y') { task _clean:ollama }
 
         Write-Host 'DONE.' -ForegroundColor Green
         "

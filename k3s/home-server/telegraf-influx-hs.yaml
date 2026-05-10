@@ -1,0 +1,141 @@
+# k3s/home-server/telegraf-influx-hs.yaml
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: influxdb
+  namespace: sara
+spec:
+  type: LoadBalancer
+  selector:
+    app: influxdb
+  ports:
+    - port: 8086
+      targetPort: 8086
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: influxdb
+  namespace: sara
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: influxdb
+  template:
+    metadata:
+      labels:
+        app: influxdb
+    spec:
+      imagePullSecrets:
+        - name: docker-credentials
+      containers:
+        - name: influxdb
+          image: influxdb:1.12-alpine
+          ports:
+            - containerPort: 8086
+          resources:
+            limits:
+              memory: "512Mi"
+          volumeMounts:
+            - name: influxdb-data
+              mountPath: /var/lib/influxdb
+      volumes:
+        - name: influxdb-data
+          hostPath:
+            path: /home/sara/k3s/influxdb-data
+            type: DirectoryOrCreate
+
+---
+# ==========================================
+# CONFIGURACIÓN DE TELEGRAF
+# ==========================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: telegraf-config
+  namespace: sara
+data:
+  telegraf.conf: |
+    [agent]
+      interval = "10s"
+      round_interval = true
+      hostname = "home-server"
+      omit_hostname = false
+
+    [[outputs.influxdb]]
+      urls = ["http://influxdb:8086"]
+      database = "telegraf"
+
+    # -- LO QUE QUEREMOS MEDIR (Hardware) --
+    [[inputs.cpu]]
+      percpu = true
+      totalcpu = true
+    [[inputs.mem]]
+    [[inputs.system]]
+    [[inputs.disk]]
+      mount_points = ["/"]
+      ignore_fs = ["tmpfs", "devtmpfs", "devfs", "iso9660", "overlay", "aufs", "squashfs", "efivarfs", "nsfs"]
+    [[inputs.diskio]]
+    [[inputs.net]]
+      interfaces = ["enp1s0", "tailscale0"]
+
+    # -- LO QUE QUEREMOS MEDIR (Spring Boot) --
+    [[inputs.prometheus]]
+      urls = [
+        "http://service-user:8080/actuator/prometheus",
+        "http://service-challenges:8081/actuator/prometheus",
+        "http://service-gamification:8082/actuator/prometheus"
+      ]
+
+---
+# ==========================================
+# TELEGRAF (DaemonSet)
+# ==========================================
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: telegraf
+  namespace: sara
+spec:
+  selector:
+    matchLabels:
+      app: telegraf
+  template:
+    metadata:
+      labels:
+        app: telegraf
+    spec:
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      containers:
+        - name: telegraf
+          image: telegraf:1.38-alpine
+          securityContext:
+            runAsUser: 0
+          env:
+            - name: HOST_ETC
+              value: /hostfs/etc
+            - name: HOST_PROC
+              value: /hostfs/proc
+            - name: HOST_SYS
+              value: /hostfs/sys
+            - name: HOST_VAR
+              value: /hostfs/var/run
+            - name: HOST_MOUNT_PREFIX
+              value: /hostfs
+          volumeMounts:
+            - name: config
+              mountPath: /etc/telegraf/telegraf.conf
+              subPath: telegraf.conf
+            - name: hostfs
+              mountPath: /hostfs
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: telegraf-config
+        - name: hostfs
+          hostPath:
+            path: /

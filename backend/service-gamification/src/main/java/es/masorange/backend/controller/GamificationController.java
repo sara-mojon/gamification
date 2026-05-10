@@ -2,6 +2,7 @@ package es.masorange.backend.controller;
 
 import es.masorange.backend.model.ChallengePoint;
 import es.masorange.backend.services.GamificationService;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -27,11 +28,20 @@ public class GamificationController {
     }
 
     @PostMapping("/award")
-    public ResponseEntity<Void> awardPoints(
+    public ResponseEntity<String> awardPoints(
             @RequestParam String userId,
             @RequestParam Integer rank) {
-
-        gamificationService.awardPointsForRank(userId, rank);
-        return ResponseEntity.ok().build();
+        try {
+            gamificationService.awardPointsForRank(userId, rank);
+            return ResponseEntity.ok().build();
+        } catch (Exception e) {
+            String errorMessage = e.getMessage() != null ? e.getMessage().toLowerCase() : "";
+            if (errorMessage.contains("404") || errorMessage.contains("not found")) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Usuario no encontrado");
+            } else if (errorMessage.contains("400") || errorMessage.contains("bad request")) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("ID de usuario con formato inválido");
+            }
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Error interno: " + e.getMessage());
+        }
     }
 }

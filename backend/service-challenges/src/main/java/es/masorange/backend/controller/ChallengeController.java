@@ -19,7 +19,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.data.domain.Page;
-
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.slf4j.Logger;
 
 import es.masorange.backend.model.BasicResponseDTO;
@@ -43,21 +43,25 @@ public class ChallengeController {
         this.ollamaTaskService = ollamaTaskService;
     }
 
+    @PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/import/{id}")
     public CodeWarsChallengeDTO importChallengeFromCodeWars(@PathVariable String id) {
         return challengeService.importChallengeFromCodeWars(id);
     }
 
+    @PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/import/excel")
     public BasicResponseDTO importChallengesFromFile(@RequestParam("file") MultipartFile file) {
         return challengeService.importChallengesFromFile(file);
     }
 
+    @PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/generate/challenge")
     public Challenge generateChallenge() {
         return ollamaTaskService.generateChallengeWithAI();
     }
 
+    @PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/generate/test/{id}")
     public ResponseEntity<BasicResponseDTO> generateTestForChallenge(@PathVariable Long id) {
         BasicResponseDTO response = challengeService.startAITestGeneration(id);
@@ -67,6 +71,7 @@ public class ChallengeController {
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(response);
     }
 
+    @PreAuthorize("hasRole('ADMIN')")
     @GetMapping("/generate/test/{id}/status")
     public ResponseEntity<Map<String, Object>> getAiTestGenerationStatus(@PathVariable Long id) {
         String status = challengeService.getAiTaskStatus(id);
@@ -138,11 +143,13 @@ public class ChallengeController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
+    @PreAuthorize("hasRole('ADMIN')")
     @DeleteMapping("/{id}")
     public BasicResponseDTO deleteChallenge(@PathVariable Long id) {
         return challengeService.deleteChallenge(id);
     }
 
+    @PreAuthorize("hasRole('ADMIN')")
     @PatchMapping("/{id}")
     public BasicResponseDTO updateChallenge(@PathVariable Long id, @RequestBody Challenge dto) {
         return challengeService.updateChallenge(id, dto);
