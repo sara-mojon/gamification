@@ -167,7 +167,7 @@ tasks:
       - task: sync:home
       - "{{.LOG_INFO}} Deploying Infrastructure... {{.END_LOG}}"
       - cmd: |
-          {{.SSH_HOME}} "echo '{{.HOME_LAB_SUDO_PASS}}' | sudo -S -p '' bash -c 'mkdir -p {{.K3S_ROOT}}/redis-data {{.K3S_ROOT}}/judge0-data {{.K3S_ROOT}}/influxdb-data && chmod 777 {{.K3S_ROOT}}/influxdb-data && if [ ! -d {{.K3S_ROOT}}/postgres-data ]; then mkdir -p {{.K3S_ROOT}}/postgres-data && chmod 777 {{.K3S_ROOT}}/postgres-data; fi && kubectl create namespace sara --dry-run=client -o yaml | kubectl apply -f - && kubectl apply -f {{.K3S_ROOT}}/k3s-secrets.yaml -f {{.K3S_ROOT}}/postgres.yaml -f {{.K3S_ROOT}}/redis.yaml -f {{.K3S_ROOT}}/judge0.yaml -f {{.K3S_ROOT}}/keycloak.yaml -f {{.K3S_ROOT}}/ingress-hs.yaml -f {{.K3S_ROOT}}/telegraf-influx-hs.yaml -f {{.K3S_ROOT}}/mailpit.yaml'"
+          {{.SSH_HOME}} "echo '{{.HOME_LAB_SUDO_PASS}}' | sudo -S -p '' bash -c 'mkdir -p {{.K3S_ROOT}}/redis-data {{.K3S_ROOT}}/judge0-data {{.K3S_ROOT}}/influxdb-data && chmod 777 {{.K3S_ROOT}}/influxdb-data && if [ ! -d {{.K3S_ROOT}}/postgres-data ]; then mkdir -p {{.K3S_ROOT}}/postgres-data && chmod 777 {{.K3S_ROOT}}/postgres-data; fi && kubectl create namespace sara --dry-run=client -o yaml | kubectl apply -f - && kubectl apply -f {{.K3S_ROOT}}/k3s-secrets.yaml -f {{.K3S_ROOT}}/postgres.yaml -f {{.K3S_ROOT}}/redis.yaml -f {{.K3S_ROOT}}/judge0.yaml -f {{.K3S_ROOT}}/keycloak.yaml -f {{.K3S_ROOT}}/ingress-hs.yaml -f {{.K3S_ROOT}}/telegraf-influx-hs.yaml'"
       - "{{.LOG_INFO}} Waiting for Postgres... {{.END_LOG}}"
       - cmd: |
           {{.SSH_HOME}} "echo '{{.HOME_LAB_SUDO_PASS}}' | sudo -S -p '' kubectl wait --for=condition=ready pod -l app=postgres-infra -n sara --timeout=60s"

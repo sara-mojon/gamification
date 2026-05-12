@@ -14,6 +14,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.scheduling.annotation.Scheduled;
 
 import es.masorange.backend.model.*;
 import es.masorange.backend.repository.UserRepository;
@@ -314,5 +315,36 @@ public class UserService {
             log.info("🏆 {} px añadidos a {}. Total: {} px | Racha: {} 🔥",
                     points, user.getUsername(), user.getScore(), user.getCurrentStreak());
         });
+    }
+
+    // ==========================================
+    // CRON PARA ACTUALIZAR RACHAS DE USUARIOS
+    // ==========================================
+    @Scheduled(cron = "0 30 21 * * *")
+    public void actualizarRachasNocturnas() {
+        log.info("🌙 Iniciando tarea CRON nocturna: Actualización de rachas de usuarios...");
+
+        try {
+            actualizarRachasDeTodosLosUsuarios();
+            log.info("✅ Rachas actualizadas correctamente.");
+        } catch (Exception e) {
+            log.error("❌ Error al ejecutar el CRON de rachas nocturnas: {}", e.getMessage(), e);
+        }
+    }
+
+    public void actualizarRachasDeTodosLosUsuarios() {
+        List<User> todosLosUsuarios = userRepository.findAll();
+        int rachasPerdidas = 0;
+
+        for (User user : todosLosUsuarios) {
+            int rachaAnterior = user.getCurrentStreak() != null ? user.getCurrentStreak() : 0;
+            validateCurrentStreak(user);
+            if (rachaAnterior > 0 && user.getCurrentStreak() == 0) {
+                rachasPerdidas++;
+            }
+        }
+
+        log.info("📊 Resumen del proceso nocturno: Se revisaron {} usuarios y se resetearon {} rachas abandonadas.",
+                todosLosUsuarios.size(), rachasPerdidas);
     }
 }

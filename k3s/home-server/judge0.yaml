@@ -45,44 +45,16 @@ spec:
       labels:
         app: judge0-server
     spec:
-      hostPID: true
+      hostPID: true 
       initContainers:
         - name: wait-for-db
           image: busybox
-          command:
-            [
-              "sh",
-              "-c",
-              "until nc -z postgres-infra 5432; do echo waiting for db; sleep 2; done;",
-            ]
-        - name: create-interceptor
-          image: judge0/judge0:1.13.1
-          command: ["/bin/sh", "-c"]
-          args:
-            - |
-              cat << 'EOF' > /wrapper/isolate
-              #!/bin/bash
-              clean_args=()
-              for arg in "$@"; do
-                case $arg in
-                  --cg) ;;
-                  --cg-*) ;;
-                  *) clean_args+=("$arg") ;;
-                esac
-              done
-              exec /usr/local/bin/isolate "${clean_args[@]}"
-              EOF
-              chmod +x /wrapper/isolate
-          volumeMounts:
-            - name: wrapper-bin
-              mountPath: /wrapper
+          command: ["sh", "-c", "until nc -z postgres-infra 5432; do echo waiting for db; sleep 2; done;"]
       containers:
         - name: judge0-server
           image: judge0/judge0:1.13.1
           ports:
             - containerPort: 2358
-          command: ["/bin/sh", "-c"]
-          args: ["export PATH=/wrapper:$PATH && ./scripts/server"]
           envFrom:
             - configMapRef:
                 name: judge0-env
@@ -100,10 +72,8 @@ spec:
                   name: app-secret
                   key: redis-password
           securityContext:
-            privileged: true
+            privileged: true 
           volumeMounts:
-            - name: wrapper-bin
-              mountPath: /wrapper
             - name: isolate-data
               mountPath: /var/local/lib/isolate
           resources:
@@ -114,8 +84,6 @@ spec:
               memory: "1.5Gi"
               cpu: "2000m"
       volumes:
-        - name: wrapper-bin
-          emptyDir: {}
         - name: isolate-data
           hostPath:
             path: /home/sara/k3s/judge0-data

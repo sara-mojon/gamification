@@ -18,6 +18,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.http.ResponseEntity;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -45,7 +46,8 @@ public class SlackIntegrationService {
     @Value("${frontend.url:http://localhost:5173}")
     private String frontendUrl;
 
-    private List<String> ultimoPodioConocido = new ArrayList<>();
+    private final StringRedisTemplate redisTemplate;
+    private static final String REDIS_PODIO_KEY = "gamificacion:ultimo_podio";
 
     private final ChallengeRepository challengeRepository;
     private final UserClientService userClientService;
@@ -53,11 +55,12 @@ public class SlackIntegrationService {
     private final DuelRepository duelRepository;
 
     public SlackIntegrationService(ChallengeRepository challengeRepository, UserClientService userClientService,
-            OllamaTaskService ollamaTaskService, DuelRepository duelRepository) {
+            OllamaTaskService ollamaTaskService, DuelRepository duelRepository, StringRedisTemplate redisTemplate) {
         this.challengeRepository = challengeRepository;
         this.userClientService = userClientService;
         this.ollamaTaskService = ollamaTaskService;
         this.duelRepository = duelRepository;
+        this.redisTemplate = redisTemplate;
     }
 
     // ==========================================
@@ -645,12 +648,13 @@ public class SlackIntegrationService {
                     podioActualNombres.add((String) user.get("username"));
                 }
 
-                if (ultimoPodioConocido.isEmpty()) {
-                    ultimoPodioConocido = podioActualNombres;
+                List<String> ultimoPodioConocido = redisTemplate.opsForList().range(REDIS_PODIO_KEY, 0, -1);
+                if (ultimoPodioConocido == null || ultimoPodioConocido.isEmpty()) {
+                    redisTemplate.opsForList().rightPushAll(REDIS_PODIO_KEY, podioActualNombres);
+                    log.info("Primer podio guardado en Redis: {}", podioActualNombres);
                     return;
                 }
 
-                // Si los nombres o el orden han cambiado... ¡HAY SORPASSO!
                 if (!ultimoPodioConocido.equals(podioActualNombres)) {
                     log.info("¡Sorpasso detectado en el Top 3! Anterior: {}, Nuevo: {}", ultimoPodioConocido,
                             podioActualNombres);
@@ -669,7 +673,9 @@ public class SlackIntegrationService {
                     mensajeSorpasso
                             .append("\n_Nadie está a salvo en el Top 3... ¿Quién dará la próxima gran sorpresa?_ 👀🍿");
                     this.enviarMensajeASlack(this.canalId, mensajeSorpasso.toString());
-                    ultimoPodioConocido = podioActualNombres;
+
+                    redisTemplate.delete(REDIS_PODIO_KEY);
+                    redisTemplate.opsForList().rightPushAll(REDIS_PODIO_KEY, podioActualNombres);
                 }
             }
         } catch (Exception e) {
