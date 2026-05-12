@@ -123,8 +123,8 @@ export default function Entrenar() {
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState("");
   
-  const [lenguaje, setLenguaje] = useState<"javascript" | "python" | "java" | "c">("javascript");
-  const [codigo, setCodigo] = useState(plantillasCodigo.javascript);
+  const [lenguaje, setLenguaje] = useState<"javascript" | "python" | "java" | "c" | "">("");
+  const [codigo, setCodigo] = useState("");
   
   const [submitting, setSubmitting] = useState(false); // <-- AQUÍ AÑADIMOS EL ESTADO
   const [result, setResult] = useState<ParsedResult | null>(null); // Estado para guardar el resultado de Judge0
@@ -161,16 +161,23 @@ export default function Entrenar() {
 
         if (resPerfil.ok) {
           const datosPerfil = await resPerfil.json();
-          if (datosPerfil.preferred_language) {
-            const langFav = datosPerfil.preferred_language.toLowerCase() as "javascript" | "python" | "java" | "c";
-            if (["javascript", "python", "java", "c"].includes(langFav)) {
-              setLenguaje(langFav);
-              setCodigo(plantillasCodigo[langFav]);
-            }
+          const langFavRaw = datosPerfil.preferredLanguage || datosPerfil.preferred_language;
+          
+          if (langFavRaw && ["javascript", "python", "java", "c"].includes(langFavRaw.toLowerCase())) {
+            const langFav = langFavRaw.toLowerCase() as "javascript" | "python" | "java" | "c";
+            setLenguaje(langFav);
+            setCodigo(plantillasCodigo[langFav]);
+          } else {
+            setLenguaje("javascript");
+            setCodigo(plantillasCodigo.javascript);
           }
+        } else {
+          setLenguaje("javascript");
+          setCodigo(plantillasCodigo.javascript);
         }
 
-      } catch {
+      } catch (err) {
+        console.error("Error cargando datos:", err);
         setError("Error de red intentando conectar con el servidor.");
       } finally {
         setCargando(false);
@@ -352,7 +359,7 @@ export default function Entrenar() {
             </select>
           </div>
           <span style={{ color: "#888", fontFamily: "monospace", fontSize: "0.9rem" }}>
-            {nombresArchivo[lenguaje]}
+            {lenguaje ? nombresArchivo[lenguaje as "javascript" | "python" | "java" | "c"] : ""}
           </span>
         </div>
 	

@@ -133,7 +133,7 @@ public class SlackIntegrationService {
                             if (slackId != null && !slackId.trim().isEmpty()) {
                                 mensajeRank.append("<@").append(slackId).append(">");
                             } else {
-                                mensajeRank.append("*").append(username).append("* 🌐");
+                                mensajeRank.append("*").append(username).append("*");
                             }
                             mensajeRank.append(" - ").append(u.get("score")).append(" px\n");
                         }
@@ -674,7 +674,7 @@ public class SlackIntegrationService {
                         if (slackId != null && !slackId.trim().isEmpty()) {
                             mensajeSorpasso.append("<@").append(slackId).append(">");
                         } else {
-                            mensajeSorpasso.append("*").append(username).append("* 🌐");
+                            mensajeSorpasso.append("*").append(username).append("*");
                         }
 
                         mensajeSorpasso.append(" con ").append(u.get("score")).append(" px\n");
