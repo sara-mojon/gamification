@@ -1,5 +1,6 @@
 package es.masorange.backend.services;
 
+import es.masorange.backend.common.exception.ResourceNotFoundException;
 import es.masorange.backend.model.ChallengePoint;
 import es.masorange.backend.repository.ChallengePointRepository;
 import org.springframework.stereotype.Service;
@@ -26,17 +27,18 @@ public class GamificationService {
     public void awardPointsForRank(String userId, Integer rank) {
         log.info("Calculando recompensa para el rank: {}", rank);
 
-        int points = pointRepository.findAll().stream()
-                .filter(config -> config.getRank().equals(rank))
-                .findFirst()
-                .map(ChallengePoint::getPointsReward)
-                .orElse(0);
+        ChallengePoint config = pointRepository.findAll().stream()
+            .filter(c -> c.getRank().equals(rank))
+            .findFirst()
+            .orElseThrow(() -> new ResourceNotFoundException("No existe configuración de puntos para el rank: " + rank));
 
-        if (points > 0) {
-            log.info("El rank {} vale {} puntos. Procesando entrega...", rank, points);
-            userClientService.addPointsToUser(userId, points);
+        if (config.getPointsReward() > 0) {
+            log.info("El rank {} otorga {} puntos. Enviando a service-user...", rank, config.getPointsReward());
+            userClientService.addPointsToUser(userId, config.getPointsReward());
         } else {
-            log.warn("El rank {} no tiene recompensa configurada o vale 0 puntos.", rank);
+            log.info("El rank {} está configurado con 0 puntos. No se requiere acción.", rank);
         }
+
     }
+
 }

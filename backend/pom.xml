@@ -15,6 +15,7 @@
     <description>Proyecto Padre para Gamificacion</description>
 
     <modules>
+        <module>common-error-handler</module>
         <module>service-auth</module>
         <module>service-challenges</module>
         <module>service-gamification</module>

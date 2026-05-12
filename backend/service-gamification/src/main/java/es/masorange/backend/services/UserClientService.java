@@ -1,5 +1,7 @@
 package es.masorange.backend.services;
 
+import es.masorange.backend.common.exception.ResourceNotFoundException;
+import es.masorange.backend.common.exception.ServiceCommunicationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -20,13 +22,17 @@ public class UserClientService {
     }
 
     public void addPointsToUser(String keycloakId, int points) {
+        String url = usersUrl + "/api/users/" + keycloakId + "/add-points?points=" + points;
         try {
-            // Hacemos un POST vacío pasando los datos por la URL
-            String url = usersUrl + "/api/users/" + keycloakId + "/add-points?points=" + points;
             restTemplate.postForLocation(url, null);
-            log.info("✅ Puntos ({} px) enviados a service-user para el usuario {}", points, keycloakId);
+            log.info("✅ Puntos enviados correctamente");
+        } catch (org.springframework.web.client.HttpClientErrorException.NotFound e) {
+            throw new ResourceNotFoundException("El usuario " + keycloakId + " no existe en el sistema.");
+        } catch (org.springframework.web.client.HttpStatusCodeException e) {
+            throw new ServiceCommunicationException("Error al conectar con Service-User: " + e.getResponseBodyAsString());
         } catch (Exception e) {
-            log.error(" Error comunicando con service-user para dar puntos: {}", e.getMessage());
+            throw new ServiceCommunicationException("Fallo crítico de red con Service-User");
         }
     }
+
 }

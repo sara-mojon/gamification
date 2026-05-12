@@ -53,6 +53,11 @@
             <version>0.0.1-SNAPSHOT</version>
             <scope>compile</scope>
         </dependency>
+        <dependency>
+            <groupId>es.masorange</groupId>
+            <artifactId>common-error-handler</artifactId>
+            <version>${project.version}</version>
+        </dependency>
 
     </dependencies>
 
