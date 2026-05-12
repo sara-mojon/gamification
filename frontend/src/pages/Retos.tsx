@@ -68,18 +68,18 @@ export default function Retos() {
   const [cargando, setCargando] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
 
-  // --- ESTADOS DE FILTROS ---
-  const [busqueda, setBusqueda] = useState("");
-  const [busquedaDebounced, setBusquedaDebounced] = useState(""); // NUEVO: Estado para el Debounce
-  const [dificultadFiltro, setDificultadFiltro] = useState("Todas");
-  const [etiquetaFiltro, setEtiquetaFiltro] = useState("Todas");
-  const [tiempoFiltro, setTiempoFiltro] = useState("Todos");
-  const [testFiltro, setTestFiltro] = useState("Todos");
-  const [visibilidadFiltro, setVisibilidadFiltro] = useState("Todos");
-  const [estadoResueltoFiltro, setEstadoResueltoFiltro] = useState("Todos");
+  // --- ESTADOS DE FILTROS (Con persistencia en SessionStorage) ---
+  const [busqueda, setBusqueda] = useState(() => sessionStorage.getItem("filtro_busqueda") || "");
+  const [busquedaDebounced, setBusquedaDebounced] = useState(busqueda);
+  const [dificultadFiltro, setDificultadFiltro] = useState(() => sessionStorage.getItem("filtro_dificultad") || "Todas");
+  const [etiquetaFiltro, setEtiquetaFiltro] = useState(() => sessionStorage.getItem("filtro_etiqueta") || "Todas");
+  const [tiempoFiltro, setTiempoFiltro] = useState(() => sessionStorage.getItem("filtro_tiempo") || "Todos");
+  const [testFiltro, setTestFiltro] = useState(() => sessionStorage.getItem("filtro_test") || "Todos");
+  const [visibilidadFiltro, setVisibilidadFiltro] = useState(() => sessionStorage.getItem("filtro_visibilidad") || "Todos");
+  const [estadoResueltoFiltro, setEstadoResueltoFiltro] = useState(() => sessionStorage.getItem("filtro_resuelto") || "Todos");
   
   // --- PAGINACIÓN ---
-  const [paginaActual, setPaginaActual] = useState(1);
+  const [paginaActual, setPaginaActual] = useState(() => Number(sessionStorage.getItem("filtro_pagina")) || 1);
   const [totalPaginasBackend, setTotalPaginasBackend] = useState(1);
 
   const [modalEliminar, setModalEliminar] = useState({ abierto: false, id: "", titulo: "" });
@@ -118,6 +118,17 @@ export default function Retos() {
     };
     comprobarAdmin();
   }, [token, baseUrlUsers]);
+
+  useEffect(() => {
+    sessionStorage.setItem("filtro_busqueda", busqueda);
+    sessionStorage.setItem("filtro_dificultad", dificultadFiltro);
+    sessionStorage.setItem("filtro_etiqueta", etiquetaFiltro);
+    sessionStorage.setItem("filtro_tiempo", tiempoFiltro);
+    sessionStorage.setItem("filtro_test", testFiltro);
+    sessionStorage.setItem("filtro_visibilidad", visibilidadFiltro);
+    sessionStorage.setItem("filtro_resuelto", estadoResueltoFiltro);
+    sessionStorage.setItem("filtro_pagina", paginaActual.toString());
+  }, [busqueda, dificultadFiltro, etiquetaFiltro, tiempoFiltro, testFiltro, visibilidadFiltro, estadoResueltoFiltro, paginaActual]);
 
   useEffect(() => {
     const manejador = setTimeout(() => {

@@ -45,6 +45,7 @@ public class SlackIntegrationService {
     @Value("${frontend.url:http://localhost:5173}")
     private String frontendUrl;
 
+    private final RestTemplate restTemplate;
     private final StringRedisTemplate redisTemplate;
     private static final String REDIS_PODIO_KEY = "gamificacion:ultimo_podio";
 
@@ -54,12 +55,14 @@ public class SlackIntegrationService {
     private final DuelRepository duelRepository;
 
     public SlackIntegrationService(ChallengeRepository challengeRepository, UserClientService userClientService,
-            OllamaTaskService ollamaTaskService, DuelRepository duelRepository, StringRedisTemplate redisTemplate) {
+            OllamaTaskService ollamaTaskService, DuelRepository duelRepository, StringRedisTemplate redisTemplate,
+            RestTemplate restTemplate) {
         this.challengeRepository = challengeRepository;
         this.userClientService = userClientService;
         this.ollamaTaskService = ollamaTaskService;
         this.duelRepository = duelRepository;
         this.redisTemplate = redisTemplate;
+        this.restTemplate = restTemplate;
     }
 
     // ==========================================
@@ -104,7 +107,6 @@ public class SlackIntegrationService {
 
             case "/rank":
                 String USER_SERVICE_URL = "http://service-user:8080/api/users/ranking";
-                RestTemplate restTemplate = new RestTemplate();
                 StringBuilder mensajeRank = new StringBuilder("🏆 *CLASIFICACIÓN CODEWARS* 🏆\n\n");
 
                 try {
@@ -123,9 +125,17 @@ public class SlackIntegrationService {
 
                         for (int i = 0; i < top3.size(); i++) {
                             Map<String, Object> u = top3.get(i);
-                            mensajeRank.append(medallas[i])
-                                    .append(" *").append(u.get("username")).append("* - ")
-                                    .append(u.get("score")).append(" px\n");
+
+                            String username = (String) u.get("username");
+                            String slackId = (String) u.get("slackId");
+
+                            mensajeRank.append(medallas[i]).append(" ");
+                            if (slackId != null && !slackId.trim().isEmpty()) {
+                                mensajeRank.append("<@").append(slackId).append(">");
+                            } else {
+                                mensajeRank.append("*").append(username).append("* 🌐");
+                            }
+                            mensajeRank.append(" - ").append(u.get("score")).append(" px\n");
                         }
                     } else {
                         mensajeRank.append("_El podio está vacío por ahora..._\n");
@@ -143,12 +153,12 @@ public class SlackIntegrationService {
 
                         if (responseUser.getStatusCode().is2xxSuccessful() && responseUser.getBody() != null) {
                             Map<String, Object> miInfo = responseUser.getBody();
-                            mensajeRank.append("👤 *Tu clasificación actual (@").append(userName).append("):*\n")
+                            mensajeRank.append("👤 *Tu clasificación actual (<@").append(userId).append(">):*\n")
                                     .append("🏅 Posición: *#").append(miInfo.get("position")).append("*\n")
                                     .append("⭐ Puntos: *").append(miInfo.get("score")).append(" px*");
                         }
                     } catch (Exception ex) {
-                        mensajeRank.append("⚠️ *¡Vaya, @").append(userName).append("!*\n")
+                        mensajeRank.append("⚠️ *¡Vaya, <@").append(userId).append(">!*\n")
                                 .append("No hemos encontrado tu perfil en la plataforma.\n")
                                 .append("Asegúrate de entrar al menos una vez para registrar tus datos.");
                     }
@@ -237,8 +247,7 @@ public class SlackIntegrationService {
                         delayedResponse.put("response_type", "ephemeral");
                         delayedResponse.put("text", "💡 *Pista para el reto " + challengeId + ":*\n> " + hint);
 
-                        RestTemplate hintRestTemplate = new RestTemplate();
-                        hintRestTemplate.postForEntity(responseUrl, delayedResponse, String.class);
+                        restTemplate.postForEntity(responseUrl, delayedResponse, String.class);
 
                     } catch (Exception e) {
                         log.error("Fallo al enviar la pista a Slack: {}", e.getMessage());
@@ -247,7 +256,7 @@ public class SlackIntegrationService {
                         errorResponse.put("text",
                                 "Lo siento <@" + userId + ">, la IA está descansando y no pudo generar la pista.");
 
-                        new RestTemplate().postForEntity(responseUrl, errorResponse, String.class);
+                        restTemplate.postForEntity(responseUrl, errorResponse, String.class);
                     }
                 });
                 break;
@@ -317,7 +326,6 @@ public class SlackIntegrationService {
     @SuppressWarnings("unchecked")
     private void enviarMensajeDirecto(String userId, String mensaje) {
         log.info("Abriendo canal de Mensaje Directo para el usuario: {}", userId);
-        RestTemplate restTemplate = new RestTemplate();
         String urlOpen = "https://slack.com/api/conversations.open";
 
         HttpHeaders headers = new HttpHeaders();
@@ -359,7 +367,6 @@ public class SlackIntegrationService {
     @SuppressWarnings("unchecked")
     private void enviarMensajeDueloConBotones(String idOponente, String idRetador) {
         log.info("Abriendo canal de DM para enviar duelo interactivo a: {}", idOponente);
-        RestTemplate restTemplate = new RestTemplate();
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
@@ -439,7 +446,6 @@ public class SlackIntegrationService {
      */
     public void enviarMensajeASlack(String canalOIdUsuario, String texto) {
         log.info("Preparando envío de mensaje a Slack al canal/ID: {}", canalOIdUsuario);
-        RestTemplate restTemplate = new RestTemplate();
         String url = "https://slack.com/api/chat.postMessage";
 
         HttpHeaders headers = new HttpHeaders();
@@ -485,7 +491,6 @@ public class SlackIntegrationService {
                 if (!vinculadoOExiste) {
                     log.warn("Usuario fantasma intentó pulsar un botón: {}", userNameClic);
 
-                    RestTemplate restTemplate = new RestTemplate();
                     Map<String, Object> errorBody = new HashMap<>();
                     errorBody.put("replace_original", false);
                     errorBody.put("response_type", "ephemeral");
@@ -564,7 +569,6 @@ public class SlackIntegrationService {
 
                 // Actualizamos el mensaje original (borra botones y pone el texto/reto)
                 if (!mensajeParaDesafiado.isEmpty()) {
-                    RestTemplate restTemplate = new RestTemplate();
                     Map<String, Object> updateBody = new HashMap<>();
                     updateBody.put("replace_original", true);
                     updateBody.put("text", mensajeParaDesafiado);
@@ -592,7 +596,6 @@ public class SlackIntegrationService {
             return;
         }
 
-        RestTemplate restTemplate = new RestTemplate();
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.setBearerAuth(slackBotToken);
@@ -628,7 +631,6 @@ public class SlackIntegrationService {
     @Scheduled(cron = "0 0 16 * * MON-FRI")
     public void comprobarSorpassoPodio() {
         String USER_SERVICE_URL = "http://service-user:8080/api/users/ranking/top3";
-        RestTemplate restTemplate = new RestTemplate();
         log.info(
                 "Ejecutando tarea programada CRON: comprobarSorpassoPodio para detectar cambios en el Top 3 del ranking");
         try {
@@ -664,9 +666,18 @@ public class SlackIntegrationService {
                     String[] medallas = { "🥇", "🥈", "🥉" };
                     for (int i = 0; i < top3Actual.size(); i++) {
                         Map<String, Object> u = top3Actual.get(i);
-                        mensajeSorpasso.append(medallas[i])
-                                .append(" *<@").append(u.get("username")).append(">* con ")
-                                .append(u.get("score")).append(" px\n");
+
+                        String username = (String) u.get("username");
+                        String slackId = (String) u.get("slackId");
+
+                        mensajeSorpasso.append(medallas[i]).append(" ");
+                        if (slackId != null && !slackId.trim().isEmpty()) {
+                            mensajeSorpasso.append("<@").append(slackId).append(">");
+                        } else {
+                            mensajeSorpasso.append("*").append(username).append("* 🌐");
+                        }
+
+                        mensajeSorpasso.append(" con ").append(u.get("score")).append(" px\n");
                     }
 
                     mensajeSorpasso
@@ -689,7 +700,6 @@ public class SlackIntegrationService {
     @Scheduled(cron = "0 0 15 * * MON-FRI")
     public void avisarRachasEnPeligro() {
         String USER_SERVICE_URL = "http://service-user:8080/api/users/streaks/at-risk";
-        RestTemplate restTemplate = new RestTemplate();
 
         try {
             ResponseEntity<List<Map<String, Object>>> response = restTemplate.exchange(
@@ -723,7 +733,6 @@ public class SlackIntegrationService {
     private boolean notificarVinculacionAServiceUser(String userName, String slackId) {
         String USER_SERVICE_URL = "http://service-user:8080/api/users/link-slack?slackUserId=" + slackId
                 + "&slackUserName=" + userName;
-        RestTemplate restTemplate = new RestTemplate();
 
         try {
             ResponseEntity<String> response = restTemplate.postForEntity(USER_SERVICE_URL, null, String.class);
@@ -741,7 +750,6 @@ public class SlackIntegrationService {
             HttpHeaders headers = new HttpHeaders();
             headers.set("Authorization", "Bearer " + slackBotToken);
             HttpEntity<String> entity = new HttpEntity<>(headers);
-            RestTemplate restTemplate = new RestTemplate();
 
             ResponseEntity<Map<String, Object>> response = restTemplate.exchange(
                     url,
