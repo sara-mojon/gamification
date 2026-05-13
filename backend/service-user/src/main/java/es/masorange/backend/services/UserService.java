@@ -298,7 +298,7 @@ public class UserService {
     // ==========================================
     // CRON PARA ACTUALIZAR RACHAS DE USUARIOS
     // ==========================================
-    @Scheduled(cron = "0 30 21 * * *")
+    @Scheduled(cron = "0 30 0 * * *")
     public void actualizarRachasNocturnas() {
         log.info("🌙 Iniciando tarea CRON nocturna: Actualización de rachas de usuarios...");
 
