@@ -1,5 +1,7 @@
 package es.masorange.backend.services;
 
+import es.masorange.backend.common.exception.BadRequestException;
+import es.masorange.backend.common.exception.ResourceNotFoundException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -171,71 +173,47 @@ public class UserService {
         return userRepository.findAll();
     }
 
-    public Optional<User> getUserById(Long id) {
-        if (id == null) {
-            return Optional.empty();
-        }
-        return userRepository.findById(id);
+    public User getUserById(Long id) {
+        if (id == null) throw new BadRequestException("El ID proporcionado es nulo");
+        return userRepository.findById(id).orElseThrow(() -> new ResourceNotFoundException("Usuario no encontrado con ID: " + id));
     }
 
-    public Optional<User> getUserByKeycloakId(String keycloakId) {
-        return userRepository.findByKeycloakId(keycloakId);
+    public User getUserByKeycloakId(String keycloakId) {
+        if (keycloakId == null) throw new BadRequestException("El keycloak ID proporcionado es nulo");
+        return userRepository.findByKeycloakId(keycloakId)
+            .orElseThrow(() -> new ResourceNotFoundException("Perfil no encontrado para Keycloak ID: " + keycloakId));
     }
 
     public Optional<User> getUserBySlackId(String slackId) {
         return userRepository.findBySlackId(slackId);
     }
 
-    public BasicResponseDTO deleteUser(Long id) {
-        if (id == null) {
-            return new BasicResponseDTO("El ID es inválido", "400");
-        }
-
-        Optional<User> userOpt = userRepository.findById(id);
-        if (userOpt.isEmpty()) {
-            return new BasicResponseDTO("El usuario no existe", "404");
-        }
-
-        User user = userOpt.get();
+    public void deleteUser(Long id) {
+        User user = getUserById(id);
 
         if (user.getKeycloakId() != null) {
-            log.info("Iniciando borrado en cascada para el usuario con Keycloak ID: {}", user.getKeycloakId());
+            log.info("Borrando en Keycloak: {}", user.getKeycloakId());
             keycloakSyncService.deleteUserInKeycloak(user.getKeycloakId());
         }
 
         userRepository.delete(user);
-        log.info("Usuario {} (ID: {}) eliminado correctamente de la BBDD local", user.getUsername(), id);
-
-        return new BasicResponseDTO("Usuario eliminado correctamente de ambos sistemas", "200");
+        log.info("Usuario {} eliminado", user.getUsername());
     }
 
-    public BasicResponseDTO updateUser(Long id, UpdateUserDto dto) {
-        if (id == null) {
-            return new BasicResponseDTO("El ID no puede ser nulo", "400");
+    public void updateUser(Long id, UpdateUserDto dto) {
+        User existing = getUserById(id);
+
+        if (dto.role() != null && !dto.role().equals(existing.getRole())) {
+            if (existing.getKeycloakId() != null) {
+                log.info("Solicitando cambio de rol en Keycloak para {} de {} a {}", existing.getUsername(), existing.getRole(), dto.role());
+                keycloakSyncService.updateUserRoleInKeycloak(existing.getKeycloakId(), existing.getRole(), dto.role());
+            }
+            existing.setRole(dto.role());
         }
 
-        return userRepository.findById(id).map(existing -> {
-
-            if (dto.role() != null && !dto.role().equals(existing.getRole())) {
-                if (existing.getKeycloakId() != null) {
-                    log.info("Solicitando cambio de rol en Keycloak para {} de {} a {}",
-                            existing.getUsername(), existing.getRole(), dto.role());
-                    keycloakSyncService.updateUserRoleInKeycloak(existing.getKeycloakId(), existing.getRole(),
-                            dto.role());
-                }
-                existing.setRole(dto.role());
-            }
-
-            Optional.ofNullable(dto.preferredLanguage()).ifPresent(existing::setPreferredLanguage);
-            userRepository.save(existing);
-
-            log.info("Usuario {} actualizado correctamente en la BBDD local", existing.getUsername());
-            return new BasicResponseDTO("Usuario actualizado correctamente", "200");
-
-        }).orElseGet(() -> {
-            log.warn("Intento de actualización fallido: No se encontró el usuario con id {}", id);
-            return new BasicResponseDTO("No se encontró el usuario con id: " + id, "404");
-        });
+        Optional.ofNullable(dto.preferredLanguage()).ifPresent(existing::setPreferredLanguage);
+        userRepository.save(existing);
+        log.info("Usuario {} actualizado correctamente en la BBDD local", existing.getUsername());
     }
 
     public List<User> getTop3Ranking() {
@@ -347,4 +325,5 @@ public class UserService {
         log.info("📊 Resumen del proceso nocturno: Se revisaron {} usuarios y se resetearon {} rachas abandonadas.",
                 todosLosUsuarios.size(), rachasPerdidas);
     }
+
 }

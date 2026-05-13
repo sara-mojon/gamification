@@ -42,33 +42,27 @@ public class UserController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<?> getUserById(@PathVariable Long id) {
-        return userService.getUserById(id)
-                .map(ResponseEntity::ok)
-                .orElse(ResponseEntity.notFound().build());
+    public User getUserById(@PathVariable Long id) {
+        return userService.getUserById(id);
     }
 
     @GetMapping("/me")
-    public ResponseEntity<User> getMyProfile(@AuthenticationPrincipal Jwt jwt) {
-        String keycloakId = jwt.getSubject();
-
-        return userService.getUserByKeycloakId(keycloakId)
-                .map(user -> {
-                    userService.validateCurrentStreak(user);
-                    return user;
-                })
-                .map(ResponseEntity::ok)
-                .orElse(ResponseEntity.notFound().build());
+    public User getMyProfile(@AuthenticationPrincipal Jwt jwt) {
+        User user = userService.getUserByKeycloakId(jwt.getSubject());
+        userService.validateCurrentStreak(user);
+        return user;
     }
 
     @DeleteMapping("/{id}")
-    public BasicResponseDTO deleteUser(@PathVariable Long id) {
-        return userService.deleteUser(id);
+    public ResponseEntity<Void> deleteUser(@PathVariable Long id) {
+        userService.deleteUser(id);
+        return ResponseEntity.noContent().build();
     }
 
     @PatchMapping("/{id}")
-    public BasicResponseDTO updateUser(@PathVariable Long id, @RequestBody UpdateUserDto dto) {
-        return userService.updateUser(id, dto);
+    public ResponseEntity<Void> updateUser(@PathVariable Long id, @RequestBody UpdateUserDto dto) {
+        userService.updateUser(id, dto);
+        return ResponseEntity.ok().build();
     }
 
     @GetMapping("/ranking/top3")
@@ -106,10 +100,9 @@ public class UserController {
     }
 
     @PostMapping("/{keycloakId}/add-points")
-    public ResponseEntity<Void> addPoints(
-            @PathVariable String keycloakId,
-            @RequestParam int points) {
+    public ResponseEntity<Void> addPoints(@PathVariable String keycloakId, @RequestParam int points) {
         userService.addPointsToUser(keycloakId, points);
         return ResponseEntity.ok().build();
     }
+
 }

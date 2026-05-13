@@ -1,5 +1,6 @@
 package es.masorange.backend.services;
 
+import es.masorange.backend.common.exception.ServiceCommunicationException;
 import org.keycloak.admin.client.Keycloak;
 import org.keycloak.admin.client.resource.UserResource;
 import org.keycloak.representations.idm.RoleRepresentation;
@@ -29,20 +30,16 @@ public class KeycloakSyncService {
      * Elimina un usuario físicamente de Keycloak usando su ID.
      */
     public void deleteUserInKeycloak(String keycloakId) {
-        try {
-            Response response = keycloak.realm(realm).users().delete(keycloakId);
-
-            if (response.getStatus() >= 200 && response.getStatus() < 300) {
-                log.info("Usuario eliminado exitosamente de Keycloak: {}", keycloakId);
-            } else {
-                log.warn("Keycloak devolvió código {} al intentar borrar el usuario {}", response.getStatus(),
-                        keycloakId);
+        try (Response response = keycloak.realm(realm).users().delete(keycloakId)) {
+            if (response.getStatus() == 404) {
+                log.warn("El usuario ya no existía en Keycloak: {}", keycloakId);
+                return;
             }
-
-            response.close();
-
+            if (response.getStatus() >= 400) {
+                throw new ServiceCommunicationException("Keycloak error: " + response.getStatus());
+            }
         } catch (Exception e) {
-            log.error("Error crítico de conexión al borrar en Keycloak: {}", e.getMessage(), e);
+            throw new ServiceCommunicationException("Error de conexión con Keycloak: " + e.getMessage());
         }
     }
 

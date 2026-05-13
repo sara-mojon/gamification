@@ -1,5 +1,6 @@
 package es.masorange.backend.services;
 
+import es.masorange.backend.common.exception.ServiceCommunicationException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
@@ -24,8 +25,7 @@ public class SlackClientService {
             String url = challengesUrl + "/api/slack/lookup?email=" + email;
             return restTemplate.getForObject(url, String.class);
         } catch (Exception e) {
-            log.error("Error al pedir el Slack ID al microservicio de retos: {}", e.getMessage());
-            return null;
+            throw new ServiceCommunicationException("Fallo al recuperar Slack ID desde Challenges para: " + email);
         }
     }
 }
