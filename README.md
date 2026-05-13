@@ -1,4 +1,4 @@
-# 🏆 [Nombre de la Plataforma] - Gamificación para Desarrolladores
+# 🏆 Ofelia Code - Gamificación para Desarrolladores
 
 ![Status](https://img.shields.io/badge/Status-En%20Desarrollo-brightgreen)
 ![React](https://img.shields.io/badge/Frontend-React%20%7C%20TypeScript-blue)
@@ -6,7 +6,7 @@
 ![Microservices](https://img.shields.io/badge/Architecture-Microservices-orange)
 ![Kubernetes](https://img.shields.io/badge/Deployment-Kubernetes-326CE5)
 
-[Nombre de la Plataforma] es un sistema interactivo diseñado para convertir el aprendizaje y la práctica de programación en una experiencia divertida, competitiva y social. Integrado directamente con Slack, permite a los equipos de desarrollo resolver retos de código, retarse a duelos y escalar en un ranking global.
+Ofelia Code es un sistema interactivo diseñado para convertir el aprendizaje y la práctica de programación en una experiencia divertida, competitiva y social. Integrado directamente con Slack, permite a los equipos de desarrollo resolver retos de código, retarse a duelos y escalar en un ranking global.
 
 ## ✨ Funcionalidades Principales
 
