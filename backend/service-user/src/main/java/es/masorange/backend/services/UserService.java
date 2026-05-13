@@ -220,22 +220,17 @@ public class UserService {
         return userRepository.findTop3ByOrderByScoreDesc();
     }
 
-    public Optional<java.util.Map<String, Object>> getUserRankingInfo(String username) {
-        Optional<User> userOpt = userRepository.findByUsername(username);
+    public Map<String, Object> getUserRankingInfo(String username) {
+        User user = userRepository.findByUsername(username).orElseThrow(() -> new ResourceNotFoundException("No se encontró el usuario con username: " + username));
 
-        if (userOpt.isEmpty()) {
-            return Optional.empty();
-        }
-
-        User user = userOpt.get();
         int posicion = userRepository.countByScoreGreaterThan(user.getScore()) + 1;
 
-        java.util.Map<String, Object> response = new java.util.HashMap<>();
+        Map<String, Object> response = new HashMap<>();
         response.put("username", user.getUsername());
         response.put("score", user.getScore());
         response.put("position", posicion);
 
-        return Optional.of(response);
+        return response;
     }
 
     public List<Map<String, Object>> getUsersWithStreakAtRisk() {
@@ -271,28 +266,28 @@ public class UserService {
     }
 
     public void addPointsToUser(String keycloakId, int points) {
-        userRepository.findByKeycloakId(keycloakId).ifPresent(user -> {
-            int currentScore = user.getScore() != null ? user.getScore() : 0;
-            user.setScore(currentScore + points);
+        User user = getUserByKeycloakId(keycloakId);
 
-            int currentChallenges = user.getCompletedChallenges() == null ? 0 : user.getCompletedChallenges();
-            user.setCompletedChallenges(currentChallenges + 1);
+        int currentScore = user.getScore() != null ? user.getScore() : 0;
+        user.setScore(currentScore + points);
 
-            LocalDate today = LocalDate.now();
-            LocalDate lastSolve = user.getLastSolveDate();
-            int currentStreak = user.getCurrentStreak() != null ? user.getCurrentStreak() : 0;
+        int currentChallenges = user.getCompletedChallenges() == null ? 0 : user.getCompletedChallenges();
+        user.setCompletedChallenges(currentChallenges + 1);
 
-            if (lastSolve == null || lastSolve.isBefore(today.minusDays(1))) {
-                user.setCurrentStreak(1);
-            } else if (lastSolve.isEqual(today.minusDays(1))) {
-                user.setCurrentStreak(currentStreak + 1);
-            }
-            user.setLastSolveDate(today);
+        LocalDate today = LocalDate.now();
+        LocalDate lastSolve = user.getLastSolveDate();
+        int currentStreak = user.getCurrentStreak() != null ? user.getCurrentStreak() : 0;
 
-            userRepository.save(user);
-            log.info("🏆 {} px añadidos a {}. Total: {} px | Racha: {} 🔥",
-                    points, user.getUsername(), user.getScore(), user.getCurrentStreak());
-        });
+        if (lastSolve == null || lastSolve.isBefore(today.minusDays(1))) {
+            user.setCurrentStreak(1);
+        }
+        else if (lastSolve.isEqual(today.minusDays(1))) {
+            user.setCurrentStreak(currentStreak + 1);
+        }
+        user.setLastSolveDate(today);
+
+        userRepository.save(user);
+        log.info("🏆 {} px añadidos a {}. Total: {} px | Racha: {} 🔥", points, user.getUsername(), user.getScore(), user.getCurrentStreak());
     }
 
     // ==========================================

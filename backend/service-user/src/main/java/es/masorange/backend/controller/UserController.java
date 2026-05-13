@@ -7,6 +7,7 @@ import es.masorange.backend.services.UserService;
 
 import java.util.List;
 
+import java.util.Map;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -71,10 +72,8 @@ public class UserController {
     }
 
     @GetMapping("/ranking/{username}")
-    public ResponseEntity<?> getUserRanking(@PathVariable String username) {
-        return userService.getUserRankingInfo(username)
-                .map(ResponseEntity::ok)
-                .orElse(ResponseEntity.notFound().build());
+    public Map<String, Object> getUserRanking(@PathVariable String username) {
+        return userService.getUserRankingInfo(username);
     }
 
     @GetMapping("/streaks/at-risk")
