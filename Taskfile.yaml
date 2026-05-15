@@ -99,6 +99,14 @@ tasks:
           docker build -f Dockerfile.k3s -t {{.DOCKER_USER}}/{{.ITEM}}:v1 .
           docker push {{.DOCKER_USER}}/{{.ITEM}}:v1
 
+  build:keycloak:
+    dir: keycloak-theme
+    silent: true
+    cmds:
+      - "{{.LOG_INFO}} Building Custom Keycloak Theme... {{.END_LOG}}"
+      - docker build -f Dockerfile.k3s -t {{.DOCKER_USER}}/mi-keycloak:v1 .
+      - docker push {{.DOCKER_USER}}/mi-keycloak:v1
+
   build:frontend:
     dir: frontend
     silent: true
@@ -194,6 +202,19 @@ tasks:
       - cmd: |
           {{.SSH_HOME}} "echo '{{.HOME_LAB_SUDO_PASS}}' | sudo -S -p '' kubectl rollout restart deployment service-challenges service-gamification -n sara"
 
+  deploy:keycloak:
+    desc: "Construye y despliega solo el tema personalizado de Keycloak"
+    silent: true
+    cmds:
+      - task: build:keycloak
+      - task: sync:home
+      - "{{.LOG_INFO}} Applying Keycloak changes and restarting... {{.END_LOG}}"
+      - cmd: |
+          {{.SSH_HOME}} "echo '{{.HOME_LAB_SUDO_PASS}}' | sudo -S -p '' kubectl apply -f {{.K3S_ROOT}}/keycloak.yaml"
+      - cmd: |
+          {{.SSH_HOME}} "echo '{{.HOME_LAB_SUDO_PASS}}' | sudo -S -p '' kubectl rollout restart deployment keycloak -n sara"
+      - "{{.LOG_SUCCESS}} Keycloak Theme Updated. {{.END_LOG}}"
+
   deploy:frontend:
     silent: true
     cmds:
@@ -221,11 +242,13 @@ tasks:
       - task: deploy:infra
       - "{{.LOG_INFO}} --- STEP 2: MONITORING STACK --- {{.END_LOG}}"
       - task: deploy:monitoring
-      - "{{.LOG_INFO}} --- STEP 3: BUILD & DEPLOY BACKEND --- {{.END_LOG}}"
+      - "{{.LOG_INFO}} --- STEP 3: BUILD & DEPLOY KEYCLOAK THEME --- {{.END_LOG}}"
+      - task: deploy:keycloak
+      - "{{.LOG_INFO}} --- STEP 4: BUILD & DEPLOY BACKEND --- {{.END_LOG}}"
       - task: deploy:backend
-      - "{{.LOG_INFO}} --- STEP 4: BUILD & DEPLOY FRONTEND --- {{.END_LOG}}"
+      - "{{.LOG_INFO}} --- STEP 5: BUILD & DEPLOY FRONTEND --- {{.END_LOG}}"
       - task: deploy:frontend
-      - "{{.LOG_INFO}} --- STEP 5: DEPLOY AI --- {{.END_LOG}}"
+      - "{{.LOG_INFO}} --- STEP 6: DEPLOY AI --- {{.END_LOG}}"
       - task: deploy:ai
       - "{{.LOG_SUCCESS}} ✅ SYSTEM DEPLOYED SUCCESSFULLY {{.END_LOG}}"
 

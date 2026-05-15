@@ -1,7 +1,6 @@
 package es.masorange.backend.controller;
 
 import es.masorange.backend.model.User;
-import es.masorange.backend.model.BasicResponseDTO;
 import es.masorange.backend.model.UpdateUserDto;
 import es.masorange.backend.services.UserService;
 
