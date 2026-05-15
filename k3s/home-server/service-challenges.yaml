@@ -69,10 +69,7 @@ spec:
               value: "50"
             # SEGURIDAD KEYCLOAK
             - name: SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI
-              valueFrom:
-                secretKeyRef:
-                  name: app-secret
-                  key: keycloak-issuer-uri
+              value: "https://auth.saramg.org/realms/masorange-realm"
             - name: SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI
               value: "http://keycloak:8080/realms/masorange-realm/protocol/openid-connect/certs"
             - name: SPRING_DATA_REDIS_HOST

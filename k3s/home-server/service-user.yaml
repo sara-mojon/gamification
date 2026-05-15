@@ -67,16 +67,15 @@ spec:
               value: "validate"
             - name: SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE
               value: "50"
+            - name: SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI
+              value: "https://auth.saramg.org/realms/masorange-realm"
+            - name: SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI
+              value: "http://keycloak:8080/realms/masorange-realm/protocol/openid-connect/certs"
             - name: KEYCLOAK_CLIENT_SECRET
               valueFrom:
                 secretKeyRef:
                   name: app-secret
                   key: keycloak-backend-client-secret
-            - name: SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI
-              valueFrom:
-                secretKeyRef:
-                  name: app-secret
-                  key: keycloak-issuer-uri
           resources:
             requests:
               memory: "350Mi"
