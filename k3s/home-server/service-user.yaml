@@ -71,6 +71,8 @@ spec:
               value: "https://auth.saramg.org/realms/masorange-realm"
             - name: SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI
               value: "http://keycloak:8080/realms/masorange-realm/protocol/openid-connect/certs"
+            - name: KEYCLOAK_SERVER_URL
+              value: "http://keycloak:8080"
             - name: KEYCLOAK_CLIENT_SECRET
               valueFrom:
                 secretKeyRef:
