@@ -1,5 +1,6 @@
 package es.masorange.backend.controller;
 
+import es.masorange.backend.common.exception.BadRequestException;
 import es.masorange.backend.services.OllamaTaskService;
 import java.util.List;
 import java.util.Map;
@@ -45,14 +46,26 @@ public class ChallengeController {
 
     @PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/import/{id}")
-    public CodeWarsChallengeDTO importChallengeFromCodeWars(@PathVariable String id) {
-        return challengeService.importChallengeFromCodeWars(id);
+    public ResponseEntity<Challenge> importChallengeFromCodeWars(@PathVariable String id) {
+        Challenge imported = challengeService.importChallengeFromCodeWars(id);
+        return ResponseEntity.status(HttpStatus.CREATED).body(imported);
     }
 
     @PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/import/excel")
-    public BasicResponseDTO importChallengesFromFile(@RequestParam("file") MultipartFile file) {
-        return challengeService.importChallengesFromFile(file);
+    public ResponseEntity<Map<String, Object>> importChallengesFromFile(@RequestParam("file") MultipartFile file) {
+        Map<String, Object> result = challengeService.importChallengesFromFile(file);
+
+        List<?> errores = (List<?>) result.get("errores");
+        List<?> exitos = (List<?>) result.get("exitos");
+
+        if (exitos.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(result);
+        } else if (!errores.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.MULTI_STATUS).body(result);
+        }
+
+        return ResponseEntity.ok(result);
     }
 
     @PreAuthorize("hasRole('ADMIN')")
@@ -63,40 +76,27 @@ public class ChallengeController {
 
     @PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/generate/test/{id}")
-    public ResponseEntity<BasicResponseDTO> generateTestForChallenge(@PathVariable Long id) {
-        BasicResponseDTO response = challengeService.startAITestGeneration(id);
-        if ("404".equals(response.status())) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
-        }
-        return ResponseEntity.status(HttpStatus.ACCEPTED).body(response);
+    public ResponseEntity<Void> generateTestForChallenge(@PathVariable Long id) {
+        challengeService.startAITestGeneration(id);
+        return ResponseEntity.accepted().build();
     }
 
     @PreAuthorize("hasRole('ADMIN')")
     @GetMapping("/generate/test/{id}/status")
-    public ResponseEntity<Map<String, Object>> getAiTestGenerationStatus(@PathVariable Long id) {
+    public Map<String, Object> getAiTestGenerationStatus(@PathVariable Long id) {
         String status = challengeService.getAiTaskStatus(id);
 
         if ("COMPLETADO".equals(status)) {
-            Map<String, String> testsGenerados = challengeService.getChallengeTestsSafely(id);
-
-            return ResponseEntity.ok(Map.of(
-                    "status", "COMPLETADO",
-                    "tests", testsGenerados));
+            return Map.of("status", "COMPLETADO", "tests", challengeService.getChallengeTestsSafely(id));
         }
-        return ResponseEntity.ok(Map.of("status", status));
+
+        return Map.of("status", status);
     }
 
     @PostMapping("/manual")
-    public ResponseEntity<BasicResponseDTO> createManualChallenge(@RequestBody Challenge dto) {
-        BasicResponseDTO response = challengeService.createManualChallenge(dto);
-
-        if ("200".equals(response.status())) {
-            return ResponseEntity.ok(response);
-        } else if ("409".equals(response.status())) {
-            return ResponseEntity.status(org.springframework.http.HttpStatus.CONFLICT).body(response);
-        } else {
-            return ResponseEntity.badRequest().body(response);
-        }
+    public ResponseEntity<Void> createManualChallenge(@RequestBody Challenge dto) {
+        challengeService.createManualChallenge(dto);
+        return ResponseEntity.status(HttpStatus.CREATED).build();
     }
 
     @GetMapping("/all")
@@ -127,32 +127,28 @@ public class ChallengeController {
     }
 
     @GetMapping("/{id}/nosolved")
-    public ResponseEntity<Challenge> getChallengeWithoutSolved(@PathVariable Long id) {
-        return challengeService.getChallenge(id)
-                .map(ResponseEntity::ok)
-                .orElse(ResponseEntity.notFound().build());
+    public Challenge getChallengeWithoutSolved(@PathVariable Long id) {
+        return challengeService.getChallenge(id);
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<Challenge> getChallenge(
-            @PathVariable Long id,
-            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+    public Challenge getChallenge(@PathVariable Long id, @RequestHeader(value = "Authorization", required = false) String authHeader) {
         String keycloakId = challengeService.extractKeycloakIdFromToken(authHeader);
-        return challengeService.getChallengeForUser(id, keycloakId)
-                .map(ResponseEntity::ok)
-                .orElse(ResponseEntity.notFound().build());
+        return challengeService.getChallengeForUser(id, keycloakId);
     }
 
     @PreAuthorize("hasRole('ADMIN')")
     @DeleteMapping("/{id}")
-    public BasicResponseDTO deleteChallenge(@PathVariable Long id) {
-        return challengeService.deleteChallenge(id);
+    public ResponseEntity<Void> deleteChallenge(@PathVariable Long id) {
+        challengeService.deleteChallenge(id);
+        return ResponseEntity.noContent().build();
     }
 
     @PreAuthorize("hasRole('ADMIN')")
     @PatchMapping("/{id}")
-    public BasicResponseDTO updateChallenge(@PathVariable Long id, @RequestBody Challenge dto) {
-        return challengeService.updateChallenge(id, dto);
+    public ResponseEntity<Void> updateChallenge(@PathVariable Long id, @RequestBody Challenge dto) {
+        challengeService.updateChallenge(id, dto);
+        return ResponseEntity.ok().build();
     }
 
     @GetMapping("/me/history")
@@ -167,25 +163,18 @@ public class ChallengeController {
 
     @PostMapping("/{id}/submit")
     public ResponseEntity<String> submitSolution(
-            @PathVariable Long id,
-            @RequestBody Map<String, String> payload,
-            @RequestHeader("Authorization") String authHeader) {
+        @PathVariable Long id, @RequestBody Map<String, String> payload, @RequestHeader("Authorization") String authHeader) throws Exception {
 
         String language = payload.get("language");
         String sourceCode = payload.get("sourceCode");
 
         if (language == null || sourceCode == null) {
-            return ResponseEntity.badRequest().body("Faltan parámetros 'language' o 'sourceCode'");
+            throw new BadRequestException("Faltan parámetros 'language' o 'sourceCode'");
         }
 
-        try {
-            String keycloakId = challengeService.extractKeycloakIdFromToken(authHeader);
-            String result = challengeService.processSubmission(id, keycloakId, language, sourceCode);
-            return ResponseEntity.ok(result);
-        } catch (Exception e) {
-            log.error("Error en el endpoint de submit para el reto {}", id, e);
-            return ResponseEntity.internalServerError().body("Error interno: " + e.getMessage());
-        }
+        String keycloakId = challengeService.extractKeycloakIdFromToken(authHeader);
+        String result = challengeService.processSubmission(id, keycloakId, language, sourceCode);
+        return ResponseEntity.ok(result);
     }
 
 }

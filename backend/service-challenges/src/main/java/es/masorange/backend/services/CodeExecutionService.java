@@ -2,6 +2,9 @@ package es.masorange.backend.services;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import es.masorange.backend.common.exception.BadRequestException;
+import es.masorange.backend.common.exception.ResourceNotFoundException;
+import es.masorange.backend.common.exception.ServiceCommunicationException;
 import es.masorange.backend.model.Challenge;
 import es.masorange.backend.repository.ChallengeRepository;
 import org.slf4j.Logger;
@@ -24,16 +27,13 @@ public class CodeExecutionService {
     private final ChallengeRepository challengeRepository;
 
     private static final Map<String, Integer> JUDGE0_LANG_IDS = Map.of(
-            "javascript", 63,
-            "python", 71,
-            "java", 62,
-            "c", 50);
+        "javascript", 63,
+        "python", 71,
+        "java", 62,
+        "c", 50
+    );
 
-    public CodeExecutionService(
-            @Value("${judge0.url:http://localhost:2358}") String judge0Url,
-            ObjectMapper objectMapper,
-            ChallengeRepository challengeRepository) {
-
+    public CodeExecutionService(@Value("${judge0.url:http://localhost:2358}") String judge0Url, ObjectMapper objectMapper, ChallengeRepository challengeRepository) {
         this.restClient = RestClient.builder().baseUrl(judge0Url).build();
         this.objectMapper = objectMapper;
         this.challengeRepository = challengeRepository;
@@ -45,32 +45,25 @@ public class CodeExecutionService {
 
         Integer langId = JUDGE0_LANG_IDS.get(langLower);
         if (langId == null) {
-            throw new IllegalArgumentException("Lenguaje no soportado por Judge0: " + language);
+            throw new BadRequestException("Lenguaje no soportado por Judge0: " + language);
         }
 
         Challenge challenge = challengeRepository.findById(challengeId)
-                .orElseThrow(() -> new RuntimeException("Challenge no encontrado: " + challengeId));
+            .orElseThrow(() -> new ResourceNotFoundException("Challenge no encontrado con ID: " + challengeId));
 
         String hiddenTests = challenge.getTests().get(langLower);
         if (hiddenTests == null || hiddenTests.isBlank()) {
-            throw new RuntimeException("No hay tests generados para " + langLower + " en este reto.");
+            throw new BadRequestException("No hay tests generados para " + langLower + " en este reto.");
         }
 
         String finalCode = assembleCode(langLower, userCode, hiddenTests);
-
         return sendToJudge0(langId, finalCode);
     }
 
-    /**
-     * Se encarga exclusivamente de la comunicación HTTP con el motor de Judge0.
-     */
     private String sendToJudge0(Integer langId, String finalCode) {
         try {
             String sourceCodeB64 = Base64.getEncoder().encodeToString(finalCode.getBytes(StandardCharsets.UTF_8));
-
-            Map<String, Object> payload = Map.of(
-                    "language_id", langId,
-                    "source_code", sourceCodeB64);
+            Map<String, Object> payload = Map.of("language_id", langId, "source_code", sourceCodeB64);
 
             String rawResponse = restClient.post()
                     .uri("/submissions?base64_encoded=true&wait=true")
@@ -80,14 +73,14 @@ public class CodeExecutionService {
                     .body(String.class);
 
             if (rawResponse == null) {
-                throw new RuntimeException("Respuesta vacía de Judge0");
+                throw new ServiceCommunicationException("Judge0 devolvió una respuesta vacía.");
             }
 
             return extractResult(objectMapper.readTree(rawResponse));
 
         } catch (Exception e) {
             log.error("[JUDGE0] Error de ejecución: ", e);
-            throw new RuntimeException("Error en el servidor de evaluación.");
+            throw new ServiceCommunicationException("Fallo de comunicación con el motor de evaluación de código (Judge0).");
         }
     }
 

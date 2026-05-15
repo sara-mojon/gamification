@@ -61,8 +61,7 @@ public class SlackAuthenticationFilter extends OncePerRequestFilter {
 
         // 4. USAMOS LA LÓGICA DE VALIDACIÓN INTERNA
         if (!isValidSlackRequest(signature, timestamp, rawPayload)) {
-            System.err.println("⚠️ ATENCIÓN: Se ha bloqueado una petición en " + request.getRequestURI()
-                    + " que fingía ser de Slack.");
+            log.error("⚠️ ATENCIÓN: Se ha bloqueado una petición en {} que fingía ser de Slack.", request.getRequestURI());
             response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Firma de Slack inválida");
             return;
         }

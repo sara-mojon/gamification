@@ -1,9 +1,15 @@
 package es.masorange.backend.services;
 
+import es.masorange.backend.common.exception.BadRequestException;
+import es.masorange.backend.common.exception.ConflictException;
+import es.masorange.backend.common.exception.InternalServerErrorException;
+import es.masorange.backend.common.exception.ResourceNotFoundException;
+import es.masorange.backend.common.exception.ServiceCommunicationException;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -63,32 +69,35 @@ public class ChallengeService {
         this.objectMapper = objectMapper;
     }
 
-    public CodeWarsChallengeDTO importChallengeFromCodeWars(String challengeId) {
+    public Challenge importChallengeFromCodeWars(String challengeId) {
         log.info("Consultando la API de CodeWars para el challenge ID: {}", challengeId);
+        try {
+            CodeWarsChallengeDTO dto = this.webClient.get()
+                    .uri("/code-challenges/{id}", challengeId)
+                    .retrieve()
+                    .bodyToMono(CodeWarsChallengeDTO.class)
+                    .block();
 
-        CodeWarsChallengeDTO dto = this.webClient.get()
-                .uri("/code-challenges/{id}", challengeId)
-                .retrieve()
-                .bodyToMono(CodeWarsChallengeDTO.class)
-                .block();
+            if (dto == null) {
+                log.error("La API de CodeWars no devolvió datos para el ID: {}", challengeId);
+                throw new ResourceNotFoundException("La API de CodeWars no devolvió datos para el ID: " + challengeId);
+            }
 
-        if (dto != null) {
             log.info("Datos obtenidos correctamente de CodeWars para: {}", dto.name());
-            saveChallenge(dto);
-        } else {
-            log.warn("La API de CodeWars no devolvió datos para el ID: {}", challengeId);
+            return saveChallenge(dto);
+        } catch (org.springframework.web.reactive.function.client.WebClientResponseException.NotFound e) {
+            throw new ResourceNotFoundException("El reto no existe en CodeWars: " + challengeId);
+        } catch (Exception e) {
+            if (e instanceof ResourceNotFoundException) throw e;
+            throw new ServiceCommunicationException("Fallo al conectar con la API de CodeWars: " + e.getMessage());
         }
-
-        return dto;
     }
 
-    public BasicResponseDTO saveChallenge(CodeWarsChallengeDTO dto) {
+    public Challenge saveChallenge(CodeWarsChallengeDTO dto) {
         log.info("Intentando guardar en BBDD el challenge: {}", dto.id());
-        Optional<Challenge> challenge = challengeRepository.findByIdCodeWars(dto.id());
 
-        if (challenge.isPresent()) {
-            log.warn("El challenge con CodeWars ID {} ya existe en la base de datos. Se omite el guardado.", dto.id());
-            return new BasicResponseDTO("El challenge ya existe en la BBDD", "409");
+        if (challengeRepository.findByIdCodeWars(dto.id()).isPresent()) {
+            throw new ConflictException("El challenge con CodeWars ID " + dto.id() + " ya existe en la BBDD.");
         }
 
         Challenge newChallenge = new Challenge();
@@ -102,10 +111,9 @@ public class ChallengeService {
             newChallenge.setRank(positiveRank);
         }
 
-        challengeRepository.save(newChallenge);
-        log.info("✅ Challenge '{}' guardado exitosamente en la BBDD", newChallenge.getName());
-
-        return new BasicResponseDTO("Challenge creado correctamente", "201");
+        Challenge newSavedChallenge = challengeRepository.save(newChallenge);
+        log.info("✅ Challenge '{}' guardado exitosamente en la BBDD", newSavedChallenge.getName());
+        return newSavedChallenge;
     }
 
     public List<Challenge> getAllChallenges() {
@@ -137,95 +145,70 @@ public class ChallengeService {
         return challengesPage;
     }
 
-    public Optional<Challenge> getChallenge(Long id) {
+    public Challenge getChallenge(Long id) {
         log.info("Buscando challenge con ID interno: {}", id);
-        Optional<Challenge> challenge = challengeRepository.findById(id);
+        return challengeRepository.findById(id)
+            .orElseThrow(() -> new ResourceNotFoundException("No se encontró ningún reto con ID: " + id));
+    }
 
-        if (challenge.isEmpty()) {
-            log.warn("No se encontró ningún challenge con ID: {}", id);
-        }
-
+    public Challenge getChallengeForUser(Long id, String keycloakId) {
+        log.info("Buscando challenge con ID interno: {}, para el usuario: {}", id, keycloakId);
+        Challenge challenge = getChallenge(id);
+        boolean isSolved = userSubmissionRepository.existsByKeycloakIdAndChallengeId(keycloakId, id);
+        challenge.setSolved(isSolved);
         return challenge;
     }
 
-    public Optional<Challenge> getChallengeForUser(Long id, String keycloakId) {
-        log.info("Buscando challenge con ID interno: {}", id);
-        return challengeRepository.findById(id).map(challenge -> {
-            boolean isSolved = userSubmissionRepository.existsByKeycloakIdAndChallengeId(keycloakId, id);
-            challenge.setSolved(isSolved);
-
-            return challenge;
-        });
+    public void deleteChallenge(Long id) {
+        log.info("Petición de eliminación para el challenge con ID: {}", id);
+        Challenge challenge = getChallenge(id);
+        challengeRepository.delete(challenge);
+        log.info("Challenge con ID: {}, eliminado correctamente", id);
     }
 
-    public BasicResponseDTO deleteChallenge(Long id) {
-        log.info("Petición de eliminación para el challenge con ID: {}", id);
-        Optional<Challenge> challenge = challengeRepository.findById(id);
+    public void updateChallenge(Long id, Challenge dto) {
+        log.info("Petición de actualización para el challenge con ID: {}", id);
+        Challenge existing = getChallenge(id);
 
-        if (challenge.isPresent()) {
-            challengeRepository.deleteById(id);
-            log.info("✅ Challenge con ID {} eliminado correctamente", id);
-            return new BasicResponseDTO("Challenge eliminado correctamente", "200");
+        if (dto.getName() != null) existing.setName(dto.getName());
+        if (dto.getDescription() != null) existing.setDescription(dto.getDescription());
+        if (dto.getRank() != null) existing.setRank(dto.getRank());
+        if (dto.getIsVisible() != null) existing.setIsVisible(dto.getIsVisible());
+        if (dto.getTags() != null && !dto.getTags().isEmpty()) {
+            existing.setTags(dto.getTags());
         }
 
-        log.warn("No se pudo eliminar: El challenge con ID {} no existe en la BBDD", id);
-        return new BasicResponseDTO("El id proporcionado no existe en la BBDD", "404");
+        if (dto.getTests() != null) {
+            boolean tieneContenidoNuevo = dto.getTests().values().stream().anyMatch(s -> s != null && !s.trim().isEmpty());
+
+            if (tieneContenidoNuevo) {
+                log.info("Actualizando tests para el reto {}:", id);
+                existing.getTests().clear();
+                dto.getTests().forEach((lang, script) -> {
+                    if (script != null && !script.trim().isEmpty()) {
+                        existing.getTests().put(lang, script);
+                    }
+                });
+            } else {
+                log.info("Ignorando actualización de tests para el reto {} (sin cambios detectados).", id);
+            }
+        }
+
+        if (existing.getTests() == null || existing.getTests().isEmpty()) {
+            if (Boolean.TRUE.equals(existing.getIsVisible())) {
+                log.info("Cambiando automáticamente la visibilidad a false porque el ID {} no tiene tests.", id);
+                existing.setIsVisible(false);
+            }
+        }
+
+        challengeRepository.save(existing);
+        log.info("✅ Challenge con ID {} actualizado correctamente", id);
     }
 
-    public BasicResponseDTO updateChallenge(Long id, Challenge dto) {
-        log.info("Petición de actualización para el challenge con ID: {}", id);
-
-        return challengeRepository.findById(id).map(existing -> {
-            if (dto.getName() != null)
-                existing.setName(dto.getName());
-            if (dto.getDescription() != null)
-                existing.setDescription(dto.getDescription());
-            if (dto.getRank() != null)
-                existing.setRank(dto.getRank());
-            if (dto.getIsVisible() != null)
-                existing.setIsVisible(dto.getIsVisible());
-            if (dto.getTags() != null && !dto.getTags().isEmpty()) {
-                existing.setTags(dto.getTags());
-            }
-
-            if (dto.getTests() != null) {
-                boolean tieneContenidoNuevo = dto.getTests().values().stream()
-                        .anyMatch(s -> s != null && !s.trim().isEmpty());
-
-                if (tieneContenidoNuevo) {
-                    log.info("Actualizando tests para el reto {}:", id);
-                    existing.getTests().clear();
-                    dto.getTests().forEach((lang, script) -> {
-                        if (script != null && !script.trim().isEmpty()) {
-                            existing.getTests().put(lang, script);
-                        }
-                    });
-                } else {
-                    log.info("Ignorando actualización de tests para el reto {} (sin cambios detectados).", id);
-                }
-            }
-
-            if (existing.getTests() == null || existing.getTests().isEmpty()) {
-                if (Boolean.TRUE.equals(existing.getIsVisible())) {
-                    log.info("Cambiando automáticamente la visibilidad a false porque el ID {} no tiene tests.", id);
-                    existing.setIsVisible(false);
-                }
-            }
-
-            challengeRepository.save(existing);
-            log.info("✅ Challenge con ID {} actualizado correctamente", id);
-            return new BasicResponseDTO("Challenge actualizado correctamente", "200");
-
-        }).orElseGet(() -> {
-            log.warn("Fallo de actualización: No se encontró el ID {}", id);
-            return new BasicResponseDTO("No encontrado", "404");
-        });
-    }
-
-    public BasicResponseDTO importChallengesFromFile(MultipartFile file) {
+    public Map<String, Object> importChallengesFromFile(MultipartFile file) {
         if (file.isEmpty()) {
-            log.warn("Intento de importación masiva fallido: El archivo está vacío");
-            return new BasicResponseDTO("El archivo está vacío", "400");
+            log.error("Intento de importación masiva fallido: El archivo está vacío");
+            throw new BadRequestException("El archivo proporcionado está vacío.");
         }
 
         List<String> idsAImportar = new ArrayList<>();
@@ -296,12 +279,12 @@ public class ChallengeService {
             }
         } catch (Exception e) {
             log.error("Error crítico al procesar el archivo {}: {}", filename, e.getMessage(), e);
-            return new BasicResponseDTO("Error al leer el archivo: " + e.getMessage(), "500");
+            throw new InternalServerErrorException("Error al leer el archivo: " + e.getMessage());
         }
 
         if (idsAImportar.isEmpty()) {
             log.warn("El archivo {} fue procesado pero no se extrajeron IDs válidos", filename);
-            return new BasicResponseDTO("No se encontraron IDs válidos en el archivo", "400");
+            throw new BadRequestException("No se encontraron IDs válidos en el archivo.");
         }
 
         log.info("Archivo procesado con éxito. Extraídos {} IDs para importar a BBDD.", idsAImportar.size());
@@ -315,41 +298,25 @@ public class ChallengeService {
                 this.importChallengeFromCodeWars(id);
                 detallesExitos.add("  • ID: " + id);
             } catch (Exception e) {
-                String errorMsg = e.getMessage();
-
-                if (errorMsg != null) {
-                    if (errorMsg.contains("404 Not Found")) {
-                        errorMsg = "404 Not Found";
-                    } else if (errorMsg.contains("from GET")) {
-                        errorMsg = errorMsg.split("from GET")[0].trim();
-                    }
-                } else {
-                    errorMsg = "Error desconocido";
-                }
-                detallesErrores.add("  • ID: " + id + " - " + errorMsg);
-                log.error("Fallo durante la importación masiva del ID {}: {}", id, errorMsg);
+                detallesErrores.add("ID: " + id + " - " + e.getMessage());
             }
         }
 
-        log.info("Importación masiva finalizada. Éxitos: {}, Errores: {}", detallesExitos.size(),
-                detallesErrores.size());
-
-        StringBuilder mensajeFinal = new StringBuilder();
-        if (!detallesExitos.isEmpty()) {
-            mensajeFinal.append("✅ Éxitos: ").append(detallesExitos.size()).append("\n");
-            mensajeFinal.append(String.join("\n", detallesExitos)).append("\n\n");
-        }
-        if (!detallesErrores.isEmpty()) {
-            mensajeFinal.append("⚠️ Errores: ").append(detallesErrores.size()).append("\n");
-            mensajeFinal.append(String.join("\n", detallesErrores));
-        }
+        log.info("Importación masiva finalizada. Éxitos: {}, Errores: {}", detallesExitos.size(), detallesErrores.size());
+        Map<String, Object> resultado = new HashMap<>();
+        resultado.put("totalProcesados", idsAImportar.size());
+        resultado.put("exitos", detallesExitos);
+        resultado.put("errores", detallesErrores);
 
         if (detallesExitos.isEmpty()) {
-            return new BasicResponseDTO(mensajeFinal.toString().trim(), "400");
+            resultado.put("mensaje", "Fallaron todas las importaciones.");
         } else if (!detallesErrores.isEmpty()) {
-            return new BasicResponseDTO(mensajeFinal.toString().trim(), "207");
+            resultado.put("mensaje", "Importación parcial completada con algunos errores.");
+        } else {
+            resultado.put("mensaje", "Importación masiva completada con éxito total.");
         }
-        return new BasicResponseDTO(mensajeFinal.toString().trim(), "200");
+
+        return resultado;
     }
 
     public BasicResponseDTO generateChallenge() {
@@ -361,20 +328,19 @@ public class ChallengeService {
         return aiTaskStatus.getOrDefault(challengeId, "NO_INICIADO");
     }
 
-    public BasicResponseDTO startAITestGeneration(Long id) {
+    public void startAITestGeneration(Long id) {
         log.info("Solicitada generación de tests con IA para el challenge ID: {}", id);
 
         if (!challengeRepository.existsById(id)) {
-            log.warn("Abortando generación de IA: No se encontró el challenge con ID: {}", id);
-            return new BasicResponseDTO("No se encontró el challenge con id: " + id, "404");
+            log.error("Abortando generación de IA: No se encontró el challenge con ID: {}", id);
+            throw new ResourceNotFoundException("No se encontró el challenge con id: " + id);
         }
+
         aiTaskStatus.put(id, "PROCESANDO");
 
         CompletableFuture.runAsync(() -> {
             ollamaTaskService.generateTestsWithAIAsync(id, aiTaskStatus);
         });
-
-        return new BasicResponseDTO("Generación de tests iniciada en segundo plano", "202");
     }
 
     public Map<String, String> getChallengeTestsSafely(Long id) {
@@ -383,81 +349,71 @@ public class ChallengeService {
                 .orElse(Map.of());
     }
 
-    public BasicResponseDTO createManualChallenge(Challenge challengeDto) {
+    public void createManualChallenge(Challenge challengeDto) {
         log.info("Recibida propuesta de reto manual: {}", challengeDto.getName());
-        try {
-            if (challengeDto.getName() == null || challengeDto.getName().trim().isEmpty()) {
-                return new BasicResponseDTO("El título del reto es obligatorio.", "400");
-            }
-            if (challengeDto.getDescription() == null || challengeDto.getDescription().trim().isEmpty()) {
-                return new BasicResponseDTO("La descripción del reto es obligatoria.", "400");
-            }
-            if (challengeRepository.existsByNameIgnoreCase(challengeDto.getName().trim())) {
-                return new BasicResponseDTO("Ya existe un reto con este título. Por favor, elige un nombre diferente.",
-                        "409");
-            }
 
-            String fakeCodeWarsId = "MANUAL-" + UUID.randomUUID().toString().substring(0, 8);
-            challengeDto.setIdCodeWars(fakeCodeWarsId);
-            String slug = challengeDto.getName().toLowerCase()
-                    .replaceAll("[^a-z0-9\\s-]", "")
-                    .replaceAll("\\s+", "-");
-            slug = slug + "-" + UUID.randomUUID().toString().substring(0, 4);
-            challengeDto.setSlug(slug);
-            challengeDto.setIsVisible(false);
-
-            challengeRepository.save(challengeDto);
-            log.info("Reto manual guardado con éxito. Slug: {}", slug);
-            return new BasicResponseDTO("Reto creado correctamente y pendiente de revisión.", "200");
-
-        } catch (Exception e) {
-            log.error("Error al guardar el reto manual: {}", e.getMessage());
-            return new BasicResponseDTO("Error interno del servidor al guardar el reto.", "500");
+        if (challengeDto.getName() == null || challengeDto.getName().trim().isEmpty()) {
+            throw new BadRequestException("El título del reto es obligatorio.");
         }
+        if (challengeDto.getDescription() == null || challengeDto.getDescription().trim().isEmpty()) {
+            throw new BadRequestException("La descripción del reto es obligatoria.");
+        }
+        if (challengeRepository.existsByNameIgnoreCase(challengeDto.getName().trim())) {
+            throw new ConflictException("Ya existe un reto con este título. Por favor, elige un nombre diferente.");
+        }
+
+        String fakeCodeWarsId = "MANUAL-" + UUID.randomUUID().toString().substring(0, 8);
+        challengeDto.setIdCodeWars(fakeCodeWarsId);
+        String slug = challengeDto.getName().toLowerCase()
+            .replaceAll("[^a-z0-9\\s-]", "")
+            .replaceAll("\\s+", "-");
+        slug = slug + "-" + UUID.randomUUID().toString().substring(0, 4);
+        challengeDto.setSlug(slug);
+        challengeDto.setIsVisible(false);
+
+        challengeRepository.save(challengeDto);
+        log.info("Reto manual guardado con éxito. Slug: {}", slug);
     }
 
     public Page<ChallengeHistoryDTO> getUserHistory(String keycloakId, int page, int size) {
-
         Pageable pageable = PageRequest.of(page, size);
-        Page<UserSubmission> submissionPage = userSubmissionRepository.findByKeycloakIdOrderBySolvedAtDesc(keycloakId,
-                pageable);
-
+        Page<UserSubmission> submissionPage = userSubmissionRepository.findByKeycloakIdOrderBySolvedAtDesc(keycloakId, pageable);
         return submissionPage.map(sub -> {
             Challenge challenge = sub.getChallenge();
 
             String dificultad;
-            int puntos;
-            switch (challenge.getRank() != null ? challenge.getRank() : 8) {
-                case 8:
-                    dificultad = "Muy Fácil";
-                    puntos = 3;
-                    break;
-                case 7:
-                    dificultad = "Fácil";
-                    puntos = 5;
-                    break;
-                case 6:
-                    dificultad = "Normal";
-                    puntos = 10;
-                    break;
-                case 5:
-                    dificultad = "Normal-Avanzado";
-                    puntos = 15;
-                    break;
-                case 4:
-                    dificultad = "Difícil";
-                    puntos = 25;
-                    break;
-                case 3:
-                    dificultad = "Muy Difícil";
-                    puntos = 50;
-                    break;
-                default:
-                    dificultad = "Kyu " + challenge.getRank();
-                    puntos = 0;
-            }
+            int puntos = switch (challenge.getRank() != null ? challenge.getRank() : 8) {
+              case 8 -> {
+                dificultad = "Muy Fácil";
+                yield 3;
+              }
+              case 7 -> {
+                dificultad = "Fácil";
+                yield 5;
+              }
+              case 6 -> {
+                dificultad = "Normal";
+                yield 10;
+              }
+              case 5 -> {
+                dificultad = "Normal-Avanzado";
+                yield 15;
+              }
+              case 4 -> {
+                dificultad = "Difícil";
+                yield 25;
+              }
+              case 3 -> {
+                dificultad = "Muy Difícil";
+                yield 50;
+              }
+              default -> {
+                dificultad = "Kyu " + challenge.getRank();
+                yield 0;
+              }
+            };
 
-            String fechaStr = sub.getSolvedAt() != null
+          String fechaStr = sub.getSolvedAt() != null
                     ? sub.getSolvedAt().format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy"))
                     : "---";
 
@@ -487,8 +443,7 @@ public class ChallengeService {
         return "desconocido";
     }
 
-    public String processSubmission(Long challengeId, String keycloakId, String language, String sourceCode)
-            throws Exception {
+    public String processSubmission(Long challengeId, String keycloakId, String language, String sourceCode) throws Exception {
         log.info("Procesando submit del usuario {} para el reto {}", keycloakId, challengeId);
 
         // 1. Ejecutar en Judge0 (Solo pasamos código, nada de tokens)
@@ -517,7 +472,7 @@ public class ChallengeService {
 
         if (!alreadySolved) {
             Challenge challenge = challengeRepository.findById(challengeId)
-                    .orElseThrow(() -> new RuntimeException("Reto no encontrado"));
+                .orElseThrow(() -> new ResourceNotFoundException("Reto no encontrado"));
 
             // 1. Avisar a Gamificación para que reparta los puntos según el nivel (Rank)
             log.info("Notificando victoria a Gamificación (Rank: {})", challenge.getRank());

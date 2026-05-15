@@ -3,6 +3,9 @@ package es.masorange.backend.controller;
 import java.util.HashMap;
 import java.util.Map;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.util.MultiValueMap;
 import org.springframework.http.ResponseEntity;
@@ -21,6 +24,7 @@ import es.masorange.backend.services.SlackIntegrationService;
 @RequestMapping("/api/slack")
 public class SlackController {
 
+    private static final Logger log = LoggerFactory.getLogger(SlackController.class);
     private final SlackIntegrationService slackService;
 
     public SlackController(SlackIntegrationService slackService) {
@@ -57,6 +61,7 @@ public class SlackController {
             return ResponseEntity.ok().build();
 
         } catch (Exception e) {
+            log.error("Error en eventos de Slack: {}", e.getMessage(), e);
             return ResponseEntity.badRequest().build();
         }
     }
@@ -91,7 +96,8 @@ public class SlackController {
             return ResponseEntity.ok().build();
 
         } catch (Exception e) {
-            return ResponseEntity.status(500).body("Error procesando interacción");
+            log.error("Error procesando interacción de Slack: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Error procesando interacción");
         }
     }
 

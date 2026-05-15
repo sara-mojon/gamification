@@ -1,5 +1,6 @@
 package es.masorange.backend.services;
 
+import es.masorange.backend.common.exception.ServiceCommunicationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -26,6 +27,8 @@ public class GamificationClientService {
             log.info("✅ Aviso de victoria enviado a Gamificación para el usuario {} (Rank: {})", keycloakId, rank);
         } catch (Exception e) {
             log.error("Error notificando victoria a Gamification: {}", e.getMessage());
+            throw new ServiceCommunicationException("No se pudo conectar con Gamification para otorgar los puntos.");
         }
     }
+
 }
