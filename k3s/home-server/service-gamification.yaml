@@ -49,14 +49,20 @@ spec:
             - containerPort: 8082
           env:
             - name: SPRING_DATASOURCE_URL
-              value: "jdbc:postgresql://postgres-infra:5432/gamification_db"
+              valueFrom:
+                secretKeyRef:
+                  name: app-secret
+                  key: gamification-db-url
             - name: SPRING_DATASOURCE_USERNAME
-              value: "postgres"
+              valueFrom:
+                secretKeyRef:
+                  name: app-secret
+                  key: gamification-db-username
             - name: SPRING_DATASOURCE_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: app-secret
-                  key: db-password
+                  key: gamification-db-password
             - name: SPRING_JPA_HIBERNATE_DDL_AUTO
               value: "validate"
             - name: SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE
@@ -64,7 +70,10 @@ spec:
             - name: OLLAMA_URL
               value: "http://ai-server.taild995dd.ts.net"
             - name: SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI
-              value: "https://auth.saramg.org/realms/masorange-realm"
+              valueFrom:
+                secretKeyRef:
+                  name: app-secret
+                  key: keycloak-issuer-uri
             - name: SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI
               value: "http://keycloak:8080/realms/masorange-realm/protocol/openid-connect/certs"
 

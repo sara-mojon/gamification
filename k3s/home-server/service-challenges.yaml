@@ -49,26 +49,39 @@ spec:
             - containerPort: 8081
           env:
             - name: SPRING_DATASOURCE_URL
-              value: "jdbc:postgresql://postgres-infra:5432/gamification_db"
+              valueFrom:
+                secretKeyRef:
+                  name: app-secret
+                  key: gamification-db-url
             - name: SPRING_DATASOURCE_USERNAME
-              value: "postgres"
+              valueFrom:
+                secretKeyRef:
+                  name: app-secret
+                  key: gamification-db-username
             - name: SPRING_DATASOURCE_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: app-secret
-                  key: db-password
+                  key: gamification-db-password
             - name: SPRING_JPA_HIBERNATE_DDL_AUTO
               value: "validate"
             - name: SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE
               value: "50"
             # SEGURIDAD KEYCLOAK
             - name: SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI
-              value: "https://auth.saramg.org/realms/masorange-realm"
+              valueFrom:
+                secretKeyRef:
+                  name: app-secret
+                  key: keycloak-issuer-uri
             - name: SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI
               value: "http://keycloak:8080/realms/masorange-realm/protocol/openid-connect/certs"
-            # COMUNICACIÓN INTERNA
-            - name: SERVICE_GAMIFICATION_URL
-              value: "http://service-gamification:8082"
+            - name: SPRING_DATA_REDIS_HOST
+              value: "redis"
+            - name: SPRING_DATA_REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: app-secret
+                  key: redis-password
             # SLACK
             - name: SLACK_BOT_TOKEN
               valueFrom:
@@ -85,9 +98,12 @@ spec:
                 secretKeyRef:
                   name: app-secret
                   key: slack-channel-test-id
-            # 2. INYECTAMOS LAS NUEVAS VARIABLES QUE CREAMOS EN JAVA
+            # 2. Comunicación Interna y APIs Externas
+            - name: SERVICE_GAMIFICATION_URL
+              value: "http://service-gamification:8082"
+            - name: SERVICE_USER_URL
+              value: "http://service-user:8080"
             - name: OLLAMA_URL
-              # Apuntamos al Ingress del AI Server por el puerto 80
               value: "http://ai-server.taild995dd.ts.net"
             - name: JUDGE0_URL
               value: "http://judge0-server:2358"
