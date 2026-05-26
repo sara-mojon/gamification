@@ -5,10 +5,17 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingRequestHeaderException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.WebRequest;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import java.time.LocalDateTime;
 import java.util.HashMap;
@@ -23,7 +30,7 @@ public class GlobalExceptionHandler {
     // ERRORES DEL CLIENTE (4xx) - Nivel WARN //
     // ====================================== //
 
-    // 1. Petición incorrecta o datos inválidos (400)
+    // 1. Petición incorrecta o datos inválidos genéricos (400)
     @ExceptionHandler(BadRequestException.class)
     public ResponseEntity<ErrorResponse> handleBadRequest(BadRequestException ex, WebRequest request) {
         log.warn("Petición incorrecta (400): {}", ex.getMessage());
@@ -39,12 +46,12 @@ public class GlobalExceptionHandler {
         ex.getBindingResult().getFieldErrors().forEach(f -> errors.put(f.getField(), f.getDefaultMessage()));
 
         ErrorResponse body = ErrorResponse.builder()
-            .timestamp(LocalDateTime.now())
-            .status(HttpStatus.BAD_REQUEST.value())
-            .error("Validation Error")
-            .message("Existen errores en los datos enviados")
-            .validationErrors(errors)
-            .build();
+                .timestamp(LocalDateTime.now())
+                .status(HttpStatus.BAD_REQUEST.value())
+                .error("Validation Error")
+                .message("Existen errores en los datos enviados")
+                .validationErrors(errors)
+                .build();
         return new ResponseEntity<>(body, HttpStatus.BAD_REQUEST);
     }
 
@@ -62,40 +69,99 @@ public class GlobalExceptionHandler {
         return buildResponse(HttpStatus.CONFLICT, ex.getMessage(), request);
     }
 
+    // 5. Error de tipo de dato en la URL (ej. /challenges?page=letras) (400)
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ErrorResponse> handleTypeMismatch(MethodArgumentTypeMismatchException ex,
+            WebRequest request) {
+        log.warn("Error de tipo de parámetro (400): {}", ex.getMessage());
+        String msg = String.format("El parámetro '%s' tiene un formato inválido. Se esperaba un tipo '%s'.",
+                ex.getName(), ex.getRequiredType() != null ? ex.getRequiredType().getSimpleName() : "válido");
+        return buildResponse(HttpStatus.BAD_REQUEST, msg, request);
+    }
+
+    // 6. Faltan parámetros o cabeceras obligatorias (ej. no enviar MultipartFile
+    // 'file') (400)
+    @ExceptionHandler({ MissingServletRequestParameterException.class, MissingRequestHeaderException.class })
+    public ResponseEntity<ErrorResponse> handleMissingParams(Exception ex, WebRequest request) {
+        log.warn("Falta parámetro/cabecera en la petición (400): {}", ex.getMessage());
+        return buildResponse(HttpStatus.BAD_REQUEST, "Falta un parámetro o cabecera obligatoria en la petición.",
+                request);
+    }
+
+    // 7. JSON malformado o Body vacío en un @RequestBody (400)
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ErrorResponse> handleMessageNotReadable(HttpMessageNotReadableException ex,
+            WebRequest request) {
+        log.warn("Cuerpo de la petición inválido o vacío (400): {}", ex.getMessage());
+        return buildResponse(HttpStatus.BAD_REQUEST,
+                "El cuerpo de la petición (JSON) está vacío, mal formado o es inválido.", request);
+    }
+
+    // 8. Problemas de Permisos (Spring Security @PreAuthorize) (403)
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ErrorResponse> handleAccessDenied(AccessDeniedException ex, WebRequest request) {
+        log.warn("Acceso denegado (403): Intento de acceso a recurso protegido sin privilegios.");
+        return buildResponse(HttpStatus.FORBIDDEN,
+                "No tienes permisos suficientes (rol de ADMIN) para realizar esta acción.", request);
+    }
+
+    // 9. Método HTTP no soportado (ej. hacer GET en un endpoint que es POST) (405)
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ErrorResponse> handleMethodNotSupported(HttpRequestMethodNotSupportedException ex,
+            WebRequest request) {
+        log.warn("Método HTTP no soportado (405): {}", ex.getMessage());
+        String msg = String.format("El método HTTP '%s' no está soportado en esta ruta.", ex.getMethod());
+        return buildResponse(HttpStatus.METHOD_NOT_ALLOWED, msg, request);
+    }
+
+    // 10. Content-Type no soportado (ej. enviar JSON donde se espera
+    // Form-UrlEncoded) (415)
+    @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
+    public ResponseEntity<ErrorResponse> handleMediaTypeNotSupported(HttpMediaTypeNotSupportedException ex,
+            WebRequest request) {
+        log.warn("Media Type no soportado (415): {}", ex.getMessage());
+        return buildResponse(HttpStatus.UNSUPPORTED_MEDIA_TYPE,
+                "El formato de los datos enviados no está soportado (revisa la cabecera Content-Type).", request);
+    }
+
     // ======================================== //
     // ERRORES DEL SERVIDOR (5xx) - Nivel ERROR //
     // ======================================== //
 
-    // 5. Error explícito del servidor (500)
+    // 11. Error explícito del servidor (500)
     @ExceptionHandler(InternalServerErrorException.class)
-    public ResponseEntity<ErrorResponse> handleInternalServerError(InternalServerErrorException ex, WebRequest request) {
+    public ResponseEntity<ErrorResponse> handleInternalServerError(InternalServerErrorException ex,
+            WebRequest request) {
         log.error("Error interno controlado (500): {}", ex.getMessage());
         return buildResponse(HttpStatus.INTERNAL_SERVER_ERROR, ex.getMessage(), request);
     }
 
-    // 6. Error de comunicación entre microservicios (502)
+    // 12. Error de comunicación entre microservicios (502)
     @ExceptionHandler(ServiceCommunicationException.class)
-    public ResponseEntity<ErrorResponse> handleServiceCommunication(ServiceCommunicationException ex, WebRequest request) {
+    public ResponseEntity<ErrorResponse> handleServiceCommunication(ServiceCommunicationException ex,
+            WebRequest request) {
         log.error("Fallo de comunicación externa (502): {}", ex.getMessage());
         return buildResponse(HttpStatus.BAD_GATEWAY, ex.getMessage(), request);
     }
 
-    // 7. Error genérico inesperado (500) - Fallback
+    // 13. Error genérico inesperado (500) - Fallback
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGlobal(Exception ex, WebRequest request) {
-        // MUY IMPORTANTE: Aquí pasamos 'ex' como segundo parámetro para imprimir el stack trace completo
+        // MUY IMPORTANTE: Aquí pasamos 'ex' como segundo parámetro para imprimir el
+        // stack trace completo
         log.error("Error crítico inesperado en el servidor (500): ", ex);
-        return buildResponse(HttpStatus.INTERNAL_SERVER_ERROR, "Ha ocurrido un error inesperado en el servidor.", request);
+        return buildResponse(HttpStatus.INTERNAL_SERVER_ERROR, "Ha ocurrido un error inesperado en el servidor.",
+                request);
     }
 
     private ResponseEntity<ErrorResponse> buildResponse(HttpStatus status, String msg, WebRequest req) {
         ErrorResponse res = ErrorResponse.builder()
-            .timestamp(LocalDateTime.now())
-            .status(status.value())
-            .error(status.getReasonPhrase())
-            .message(msg)
-            .path(req.getDescription(false).replace("uri=", ""))
-            .build();
+                .timestamp(LocalDateTime.now())
+                .status(status.value())
+                .error(status.getReasonPhrase())
+                .message(msg)
+                .path(req.getDescription(false).replace("uri=", ""))
+                .build();
         return new ResponseEntity<>(res, status);
     }
 
