@@ -66,7 +66,13 @@ spec:
             - name: SPRING_JPA_HIBERNATE_DDL_AUTO
               value: "validate"
             - name: SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE
-              value: "50"
+              value: "20"
+            - name: SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE
+              value: "5"
+            - name: SERVER_TOMCAT_THREADS_MAX
+              value: "500"
+            - name: SERVER_TOMCAT_ACCEPT_COUNT
+              value: "200"
             - name: OLLAMA_URL
               value: "http://ai-server.taild995dd.ts.net"
             - name: SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI
