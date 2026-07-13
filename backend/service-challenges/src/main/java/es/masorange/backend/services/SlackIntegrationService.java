@@ -72,13 +72,17 @@ public class SlackIntegrationService {
             String responseUrl) {
 
         Map<String, Object> response = new HashMap<>();
-        boolean vinculadoOExiste = notificarVinculacionAServiceUser(userName, userId);
 
-        if (!vinculadoOExiste) {
-            response.put("response_type", "ephemeral");
-            response.put("text", "⚠️ *¡Alto ahí, <@" + userId + ">!*\n" +
-                    "No he podido encontrar tu cuenta en la plataforma. Asegúrate de haber iniciado sesión en la web.");
-            return response;
+        // Excluimos el comando /info de la validación estricta de usuario
+        if (!"/info".equals(command)) {
+            boolean vinculadoOExiste = notificarVinculacionAServiceUser(userName, userId);
+
+            if (!vinculadoOExiste) {
+                response.put("response_type", "ephemeral");
+                response.put("text", "⚠️ *¡Alto ahí, <@" + userId + ">!*\n" +
+                        "No he podido encontrar tu cuenta en la plataforma. Asegúrate de haber iniciado sesión en la web usando el comando `/info` para obtener el enlace.");
+                return response;
+            }
         }
 
         log.info("Comando recibido: {} ejecutado por @{}", command, userName);
