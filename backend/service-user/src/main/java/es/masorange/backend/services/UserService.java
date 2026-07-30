@@ -89,10 +89,15 @@ public class UserService {
             newUser.setEmail(email);
 
             if (email != null) {
-                String slackIdAutomatico = slackClientService.getSlackIdByEmail(email);
-                if (slackIdAutomatico != null) {
-                    newUser.setSlackId(slackIdAutomatico);
-                    log.info("🔗 Slack ID recuperado desde service-challenges para: {}", email);
+                try {
+                    String slackIdAutomatico = slackClientService.getSlackIdByEmail(email);
+                    if (slackIdAutomatico != null) {
+                        newUser.setSlackId(slackIdAutomatico);
+                        log.info("🔗 Slack ID recuperado desde service-challenges para: {}", email);
+                    }
+                } catch (Exception e) {
+                    log.warn("⚠️ No se pudo obtener el Slack ID automáticamente para {}. Motivo: {}", email,
+                            e.getMessage());
                 }
             }
 
@@ -174,14 +179,18 @@ public class UserService {
     }
 
     public User getUserById(Long id) {
-        if (id == null) throw new BadRequestException("El ID proporcionado es nulo");
-        return userRepository.findById(id).orElseThrow(() -> new ResourceNotFoundException("Usuario no encontrado con ID: " + id));
+        if (id == null)
+            throw new BadRequestException("El ID proporcionado es nulo");
+        return userRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Usuario no encontrado con ID: " + id));
     }
 
     public User getUserByKeycloakId(String keycloakId) {
-        if (keycloakId == null) throw new BadRequestException("El keycloak ID proporcionado es nulo");
+        if (keycloakId == null)
+            throw new BadRequestException("El keycloak ID proporcionado es nulo");
         return userRepository.findByKeycloakId(keycloakId)
-            .orElseThrow(() -> new ResourceNotFoundException("Perfil no encontrado para Keycloak ID: " + keycloakId));
+                .orElseThrow(
+                        () -> new ResourceNotFoundException("Perfil no encontrado para Keycloak ID: " + keycloakId));
     }
 
     public Optional<User> getUserBySlackId(String slackId) {
@@ -205,7 +214,8 @@ public class UserService {
 
         if (dto.role() != null && !dto.role().equals(existing.getRole())) {
             if (existing.getKeycloakId() != null) {
-                log.info("Solicitando cambio de rol en Keycloak para {} de {} a {}", existing.getUsername(), existing.getRole(), dto.role());
+                log.info("Solicitando cambio de rol en Keycloak para {} de {} a {}", existing.getUsername(),
+                        existing.getRole(), dto.role());
                 keycloakSyncService.updateUserRoleInKeycloak(existing.getKeycloakId(), existing.getRole(), dto.role());
             }
             existing.setRole(dto.role());
@@ -221,7 +231,8 @@ public class UserService {
     }
 
     public Map<String, Object> getUserRankingInfo(String username) {
-        User user = userRepository.findByUsername(username).orElseThrow(() -> new ResourceNotFoundException("No se encontró el usuario con username: " + username));
+        User user = userRepository.findByUsername(username).orElseThrow(
+                () -> new ResourceNotFoundException("No se encontró el usuario con username: " + username));
 
         int posicion = userRepository.countByScoreGreaterThan(user.getScore()) + 1;
 
@@ -280,14 +291,14 @@ public class UserService {
 
         if (lastSolve == null || lastSolve.isBefore(today.minusDays(1))) {
             user.setCurrentStreak(1);
-        }
-        else if (lastSolve.isEqual(today.minusDays(1))) {
+        } else if (lastSolve.isEqual(today.minusDays(1))) {
             user.setCurrentStreak(currentStreak + 1);
         }
         user.setLastSolveDate(today);
 
         userRepository.save(user);
-        log.info("🏆 {} px añadidos a {}. Total: {} px | Racha: {} 🔥", points, user.getUsername(), user.getScore(), user.getCurrentStreak());
+        log.info("🏆 {} px añadidos a {}. Total: {} px | Racha: {} 🔥", points, user.getUsername(), user.getScore(),
+                user.getCurrentStreak());
     }
 
     // ==========================================
