@@ -48,7 +48,7 @@ public class UserController {
 
     @GetMapping("/me")
     public User getMyProfile(@AuthenticationPrincipal Jwt jwt) {
-        User user = userService.getUserByKeycloakId(jwt.getSubject());
+        User user = userService.syncUserWithKeycloak(jwt);
         userService.validateCurrentStreak(user);
         return user;
     }

@@ -111,14 +111,15 @@ public class OllamaTaskService {
         String prompt = templateOpt.get().getTemplateContent().replace("{DESCRIPTION}", challenge.getDescription());
 
         Map<String, Object> options = Map.of(
-                "temperature", 0.4,
+                "temperature", 0.1,
                 "num_predict", 2048,
                 "num_ctx", 8192,
                 "top_k", 40,
                 "top_p", 0.9,
                 "repeat_penalty", 1.1);
 
-        OllamaRequest requestBody = new OllamaRequest("qwen2.5-coder:7b", prompt, false, options);
+        // MODELO 14B: para la generación de tests.
+        OllamaRequest requestBody = new OllamaRequest("qwen2.5-coder:14b", prompt, false, options);
         WebClient ollamaClient = WebClient.builder().baseUrl(ollamaUrl).build();
 
         try {
@@ -128,6 +129,7 @@ public class OllamaTaskService {
                     .bodyValue(requestBody)
                     .retrieve()
                     .bodyToMono(OllamaResponse.class)
+                    .timeout(Duration.ofMinutes(10))
                     .block();
 
             if (respuestaOllama != null && respuestaOllama.response() != null) {
@@ -164,7 +166,7 @@ public class OllamaTaskService {
                 "num_predict", 500,
                 "num_ctx", 4096);
 
-        OllamaRequest requestBody = new OllamaRequest("qwen2.5-coder:7b", prompt, false, options);
+        OllamaRequest requestBody = new OllamaRequest("qwen2.5-coder:14b", prompt, false, options);
         WebClient ollamaClient = WebClient.builder().baseUrl(ollamaUrl).build();
 
         try {
@@ -190,15 +192,16 @@ public class OllamaTaskService {
     public Challenge generateChallengeWithAI() {
         log.info("Solicitando a Ollama la generación de un nuevo reto desde cero...");
 
-        Optional<PromptTemplate> templateOpt = promptTemplateRepository.findByLanguageAndActiveTrue("generate_challenge");
+        Optional<PromptTemplate> templateOpt = promptTemplateRepository
+                .findByLanguageAndActiveTrue("generate_challenge");
         if (templateOpt.isEmpty()) {
             log.error("No se encontró un prompt template activo para 'generate_challenge'.");
             throw new ResourceNotFoundException("Error: Plantilla de generación de retos no configurada.");
         }
 
         String prompt = templateOpt.get().getTemplateContent();
-        Map<String, Object> options = Map.of("temperature", 0.8, "num_predict", 3000, "num_ctx", 4096);
-        OllamaRequest requestBody = new OllamaRequest("qwen2.5-coder:7b", prompt, false, options);
+        Map<String, Object> options = Map.of("temperature", 0.6, "num_predict", 3000, "num_ctx", 4096);
+        OllamaRequest requestBody = new OllamaRequest("qwen2.5-coder:14b", prompt, false, options);
         WebClient ollamaClient = WebClient.builder().baseUrl(ollamaUrl).build();
 
         try {
@@ -208,7 +211,7 @@ public class OllamaTaskService {
                     .bodyValue(requestBody)
                     .retrieve()
                     .bodyToMono(OllamaResponse.class)
-                    .timeout(Duration.ofMinutes(2))
+                    .timeout(Duration.ofMinutes(3))
                     .block();
 
             if (respuestaOllama != null && respuestaOllama.response() != null) {
@@ -232,7 +235,8 @@ public class OllamaTaskService {
                 }
 
                 nuevoReto.setIdCodeWars("AI-" + UUID.randomUUID().toString().substring(0, 8));
-                String slugGenerado = nuevoReto.getName().toLowerCase().replaceAll("[^a-z0-9\\s-]", "").replaceAll("\\s+", "-");
+                String slugGenerado = nuevoReto.getName().toLowerCase().replaceAll("[^a-z0-9\\s-]", "")
+                        .replaceAll("\\s+", "-");
                 nuevoReto.setSlug(slugGenerado + "-" + UUID.randomUUID().toString().substring(0, 4));
                 nuevoReto.setIsVisible(false);
 
